@@ -1,0 +1,78 @@
+version: 2.1
+
+orbs:
+  orb-tools: circleci/orb-tools@12.0
+  shellcheck: circleci/shellcheck@3.2
+
+workflows:
+  lint-pack-validate-publish:
+    jobs:
+      # Pre-commit hooks and linting
+      - orb-tools/lint:
+          filters:
+            branches:
+              ignore: main
+      
+      # Shellcheck the bash scripts
+      - shellcheck/check:
+          dir: src/scripts
+          exclude: SC2148,SC1091  # Ignore shebang and sourcing warnings for orb context
+          filters:
+            branches:
+              ignore: main
+      
+      # Pack and validate the orb
+      - orb-tools/pack:
+          filters:
+            branches:
+              ignore: main
+      
+      - orb-tools/review:
+          requires:
+            - orb-tools/pack
+          filters:
+            branches:
+              ignore: main
+      
+      # Publish development version for testing
+      - orb-tools/publish:
+          orb_name: kevnm67/ci-failure-notifier
+          vcs_type: << pipeline.project.type >>
+          requires:
+            - orb-tools/lint
+            - orb-tools/pack
+            - orb-tools/review
+            - shellcheck/check
+          context: orb-publishing
+          filters:
+            branches:
+              ignore: main
+      
+      # Trigger integration tests (would be added later)
+      - orb-tools/continue:
+          pipeline_number: << pipeline.number >>
+          vcs_type: << pipeline.project.type >>
+          requires:
+            - orb-tools/publish
+          filters:
+            branches:
+              ignore: main
+
+  # Production release workflow
+  release:
+    jobs:
+      - orb-tools/pack:
+          filters:
+            branches:
+              only: main
+      
+      - orb-tools/publish:
+          orb_name: kevnm67/ci-failure-notifier
+          vcs_type: << pipeline.project.type >>
+          pub_type: production
+          requires:
+            - orb-tools/pack
+          context: orb-publishing
+          filters:
+            branches:
+              only: main

@@ -1,0 +1,4 @@
+version: 2.1
+description: "CI failure notifications with error analysis via Telegram"
+display:
+  home_url: https://github.com/kevnm67/ci-failure-notifier
