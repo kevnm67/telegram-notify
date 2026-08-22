@@ -1,0 +1,18 @@
+# Test + coverage output
+coverage/
+test-results/
+*.orb.yml
+orb.yml
+
+# Wiki clone used by make wiki-sync
+.wiki-tmp/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local secrets
+.env
+.envrc.local

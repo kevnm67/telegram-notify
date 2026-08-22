@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Test double for curl. Records every invocation to $MOCK_CURL_LOG and
+# answers from MOCK_* variables so the orb script can be exercised offline.
+set -euo pipefail
+printf '%s\n' "$*" >>"${MOCK_CURL_LOG:?}"
+
+url=""
+out_file=""
+want_code=false
+args=("$@")
+for ((i = 0; i < ${#args[@]}; i++)); do
+    case "${args[$i]}" in
+    -o) out_file="${args[$((i + 1))]}" ;;
+    -w) want_code=true ;;
+    http://* | https://*) url="${args[$i]}" ;;
+    esac
+done
+
+if [[ "${MOCK_CURL_EXIT:-0}" != "0" ]]; then
+    exit "${MOCK_CURL_EXIT}"
+fi
+
+case "$url" in
+*/sendMessage)
+    if [[ -n "$out_file" ]]; then
+        printf '%s' "${MOCK_TELEGRAM_BODY:-{\"ok\":true\}}" >"$out_file"
+    fi
+    if [[ "$want_code" == true ]]; then
+        printf '%s' "${MOCK_HTTP_CODE:-200}"
+    fi
+    ;;
+*/api/v1.1/*)
+    printf '%s' "${MOCK_CIRCLE_BUILD_JSON:-}"
+    ;;
+*step-output*)
+    printf '%s' "${MOCK_STEP_OUTPUT:-}"
+    ;;
+*)
+    echo "mock curl: unexpected URL ${url}" >&2
+    exit 22
+    ;;
+esac

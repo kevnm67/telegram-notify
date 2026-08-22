@@ -1,27 +1,47 @@
+# Versions verified 2026-08-22 via GitHub releases/tags of each hook repo.
 repos:
   - repo: https://github.com/koalaman/shellcheck-precommit
-    rev: v0.9.0
+    rev: v0.11.0
     hooks:
       - id: shellcheck
-        args: [--severity=warning]
-        exclude: ^(?!src/scripts/).*$
+        args: [--severity=warning, -x]
+        types: [shell]
+        files: ^(src/scripts|scripts/ci|tests)/
 
   - repo: https://github.com/adrienverge/yamllint
-    rev: v1.32.0
+    rev: v1.38.0
     hooks:
       - id: yamllint
         args: [--format, parsable, --strict]
 
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.37.0
+    rev: v0.49.1
     hooks:
       - id: markdownlint
         args: [--config, .markdownlint.yaml]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-merge-conflict
       - id: check-yaml
+        exclude: ^\.circleci/test-deploy\.yml$ # contains the injected-orb placeholder
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+
+  - repo: local
+    hooks:
+      - id: orb-validate
+        name: circleci orb pack + validate
+        entry: make validate
+        language: system
+        files: ^src/
+        pass_filenames: false
+      - id: bats
+        name: bats unit tests
+        entry: make test
+        language: system
+        files: ^(src/scripts|tests)/
+        pass_filenames: false

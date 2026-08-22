@@ -1,0 +1,33 @@
+---
+name: Claude Code Review
+
+'on':
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+  id-token: write
+  actions: read
+
+jobs:
+  review:
+    # Bot-actor guard: Renovate/Dependabot PRs are skipped (skipped check still satisfies rulesets).
+    if: ${{ !contains(github.actor, '[bot]') }}
+    uses: kevnm67/engineering-toolkit/.github/workflows/reusable-claude-review.yml@main
+    with:
+      skip-bot-runs: true
+      review-prompt: >-
+        This is a CircleCI orb written in bash (src/scripts/notify.sh) with a
+        bats test-suite. Focus on: shell quoting and `set -u` safety, HTML
+        escaping of anything interpolated into the Telegram message, the
+        failure-safe contract (exit 0 unless fail_on_error), snake_case orb
+        parameter names, and keeping README/wiki in sync with parameters.
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

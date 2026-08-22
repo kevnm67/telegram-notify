@@ -1,0 +1,80 @@
+description: >
+  Send a Telegram message when the job succeeds (runs `when: on_success`).
+  Shorthand for `notify` with `event: success`.
+
+parameters:
+  chat_id:
+    type: string
+    default: ""
+    description: Telegram chat ID. Falls back to the TELEGRAM_CHAT_ID environment variable when empty.
+  bot_token:
+    type: env_var_name
+    default: TELEGRAM_BOT_TOKEN
+    description: Name of the environment variable holding the Telegram bot token.
+  circle_token:
+    type: env_var_name
+    default: CIRCLE_TOKEN
+    description: Name of the environment variable holding a CircleCI API token (optional, enables error output).
+  max_lines:
+    type: integer
+    default: 50
+    description: Maximum number of trailing output lines from the failed step to include.
+  include_links:
+    type: boolean
+    default: true
+    description: Append "View Build | View Workflow" links to the message.
+  custom_message:
+    type: string
+    default: ""
+    description: Extra text (Telegram HTML allowed) inserted under the headline.
+  mentions:
+    type: string
+    default: ""
+    description: Space-separated Telegram usernames to append (e.g. "@alice @bob").
+  thread_id:
+    type: string
+    default: ""
+    description: Forum topic (message_thread_id) to post into.
+  silent:
+    type: boolean
+    default: false
+    description: Send without a notification sound.
+  dry_run:
+    type: boolean
+    default: false
+    description: Print the rendered message instead of calling Telegram.
+  fail_on_error:
+    type: boolean
+    default: false
+    description: Fail the step if the notification cannot be sent.
+  vcs_type:
+    type: enum
+    enum: [github, bitbucket]
+    default: github
+    description: VCS provider used in the CircleCI v1.1 API path.
+  api_base:
+    type: string
+    default: https://api.telegram.org
+    description: Telegram Bot API base URL (override for proxies or tests).
+  step_name:
+    type: string
+    default: "Telegram notification"
+    description: Display name of the step in the CircleCI UI.
+
+steps:
+  - notify:
+      event: success
+      chat_id: << parameters.chat_id >>
+      bot_token: << parameters.bot_token >>
+      circle_token: << parameters.circle_token >>
+      max_lines: << parameters.max_lines >>
+      include_links: << parameters.include_links >>
+      custom_message: << parameters.custom_message >>
+      mentions: << parameters.mentions >>
+      thread_id: << parameters.thread_id >>
+      silent: << parameters.silent >>
+      dry_run: << parameters.dry_run >>
+      fail_on_error: << parameters.fail_on_error >>
+      vcs_type: << parameters.vcs_type >>
+      api_base: << parameters.api_base >>
+      step_name: << parameters.step_name >>

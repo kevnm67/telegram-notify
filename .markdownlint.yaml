@@ -1,16 +1,13 @@
 # markdownlint configuration
-# Kevin's standard config
-
-# MD012: Multiple consecutive blank lines
 MD012:
   maximum: 1
-
-# MD013: Line length
 MD013:
-  line_length: 80
+  line_length: 120
   tables: false
   code_blocks: false
-
-# MD007: Unordered list indentation
 MD007:
-  indent: 4
+  indent: 2
+MD024:
+  siblings_only: true # changelog sections repeat "Added"/"Changed"
+MD033: false # inline HTML (badges, <details>)
+MD041: false # first line may be a badge row

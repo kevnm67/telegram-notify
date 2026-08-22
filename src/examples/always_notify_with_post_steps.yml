@@ -1,0 +1,24 @@
+description: >
+  Use `notify` with `event: always` as a post-step so every job in the
+  workflow reports its outcome without editing the job definitions. The chat
+  ID comes from TELEGRAM_CHAT_ID in the context.
+usage:
+  version: 2.1
+  orbs:
+    telegram-notify: kevnm67/telegram-notify@1.0.0
+  jobs:
+    test:
+      docker:
+        - image: cimg/node:current
+      steps:
+        - checkout
+        - run: npm test
+  workflows:
+    ci:
+      jobs:
+        - test:
+            context: telegram
+            post-steps:
+              - telegram-notify/notify:
+                  event: always
+                  custom_message: "<i>nightly suite</i>"

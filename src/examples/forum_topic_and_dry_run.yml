@@ -1,0 +1,24 @@
+description: >
+  Post into a specific forum topic of a Telegram group and preview the
+  rendered message in the step output with `dry_run` before going live.
+usage:
+  version: 2.1
+  orbs:
+    telegram-notify: kevnm67/telegram-notify@1.0.0
+  jobs:
+    lint:
+      docker:
+        - image: cimg/base:current
+      steps:
+        - checkout
+        - run: make lint
+        - telegram-notify/notify_failure:
+            chat_id: "-1001234567890"
+            thread_id: "42"
+            max_lines: 20
+            dry_run: true
+  workflows:
+    ci:
+      jobs:
+        - lint:
+            context: telegram
