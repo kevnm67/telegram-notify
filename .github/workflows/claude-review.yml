@@ -5,29 +5,126 @@ name: Claude Code Review
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
 
+# Cancel in-progress reviews when new commits are pushed
 concurrency:
   group: claude-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
+# Default least-privilege; job overrides only what it needs
 permissions:
   contents: read
-  pull-requests: write
-  issues: read
-  id-token: write
-  actions: read
 
 jobs:
-  review:
-    # Bot-actor guard: Renovate/Dependabot PRs are skipped (skipped check still satisfies rulesets).
-    if: ${{ !contains(github.actor, '[bot]') }}
-    uses: kevnm67/engineering-toolkit/.github/workflows/reusable-claude-review.yml@main
-    with:
-      skip-bot-runs: true
-      review-prompt: >-
-        This is a CircleCI orb written in bash (src/scripts/notify.sh) with a
-        bats test-suite. Focus on: shell quoting and `set -u` safety, HTML
-        escaping of anything interpolated into the Telegram message, the
-        failure-safe contract (exit 0 unless fail_on_error), snake_case orb
-        parameter names, and keeping README/wiki in sync with parameters.
-    secrets:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  claude-review:
+    # Skip dependabot PRs: dependabot-triggered runs read Dependabot secrets,
+    # not Actions secrets, so ANTHROPIC_API_KEY is unavailable and the job fails.
+    if: >-
+      github.event.pull_request.draft == false &&
+      !contains(github.actor, '[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+      actions: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 1
+          # persist-credentials: true is required — claude-code-action runs
+          # `git fetch origin <pr-branch>` itself and fails with "could not
+          # read Username for 'https://github.com'" without stored credentials
+          # (same fix as reusable-claude-review.yml, PR #189; observed again
+          # on PR #190 run 28679732482).
+          persist-credentials: true
+
+      - name: Run Claude Code Review
+        id: claude-review
+        uses: anthropics/claude-code-action@9d7150bc8a3dae8149739a88019d192b579ad90c # v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          track_progress: true
+          allowed_bots: "renovate[bot],dependabot[bot]"
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Perform a comprehensive code review with the following process guidelines:
+
+            ## Review Process
+
+            1. Run `gh pr diff ${{ github.event.pull_request.number }}` to see all changes
+            2. Read CLAUDE.md for project conventions if it exists
+            3. Project context: this is a CircleCI orb written in bash
+               (src/scripts/notify.sh) with a bats test-suite. Focus on shell
+               quoting and `set -u` safety, HTML escaping of anything interpolated
+               into the Telegram message, the failure-safe contract (exit 0 unless
+               fail_on_error), snake_case orb parameter names, CircleCI booleans
+               rendering as 1/0, and README/wiki staying in sync with parameters.
+
+            ## Review Focus Areas
+
+            1. **Code Quality**
+              - Clean code principles and best practices
+              - Proper error handling and edge cases
+              - Code readability and maintainability
+
+            2. **Security**
+              - Check for potential security vulnerabilities
+              - Validate input sanitization
+              - Review authentication/authorization logic
+
+            3. **Performance**
+              - Identify potential performance bottlenecks
+              - Review for N+1 queries or memory issues
+
+            4. **Documentation**
+              - Ensure code is properly documented
+              - Check README parameter table and CHANGELOG are updated
+
+            ## Required Output Format
+
+            Post a comment using `gh pr comment ${{ github.event.pull_request.number }} --body "..."`.
+
+            IMPORTANT: Use GitHub <details> tags for each section. Format EXACTLY like this:
+
+            ```markdown
+            ## PR Review: [Brief Title]
+
+            **Verdict:** LGTM / Needs Work / Blocking Issues
+
+            <details>
+            <summary>Security Review (X items)</summary>
+
+            - Finding 1 with `file:line` reference
+            - Finding 2 with code suggestion
+            </details>
+
+            <details>
+            <summary>Code Quality (X items)</summary>
+
+            - Patterns, error handling, structure
+            </details>
+
+            <details>
+            <summary>Suggestions</summary>
+
+            - Non-blocking improvements
+            </details>
+
+            ### Praise
+            - What was done well
+            ```
+
+            Provide detailed feedback using inline comments for specific issues.
+            Use top-level comments for general observations or praise.
+
+          # Tools for comprehensive PR review
+          claude_args: >-
+            --allowedTools
+            "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"

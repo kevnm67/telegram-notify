@@ -1,9 +1,11 @@
+# Inlined from kevnm67/engineering-toolkit (private repo; public repos cannot call
+# private reusable workflows). Keep in sync with the reusable-*.yml source.
 ---
 name: PR Summary
 
 'on':
   pull_request:
-    types: [opened, synchronize, ready_for_review]
+    types: [opened, synchronize, ready_for_review, reopened]
 
 concurrency:
   group: pr-summary-${{ github.event.pull_request.number }}
@@ -14,6 +16,188 @@ permissions:
   pull-requests: write
 
 jobs:
-  summary:
-    if: ${{ !contains(github.actor, '[bot]') }}
-    uses: kevnm67/engineering-toolkit/.github/workflows/reusable-pr-summary.yml@main
+  pr-summary:
+    if: github.event.pull_request.draft == false && !contains(github.actor, '[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Post PR summary
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const MARKER = '<!-- pr-summary -->';
+            const pr = context.payload.pull_request;
+            const prNumber = pr.number;
+
+            // Fetch changed files
+            const files = [];
+            let page = 1;
+            while (true) {
+              const { data: batch } = await github.rest.pulls.listFiles({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                per_page: 100,
+                page,
+              });
+              files.push(...batch);
+              if (batch.length < 100) break;
+              page++;
+            }
+
+            const totalAdditions = files.reduce((s, f) => s + f.additions, 0);
+            const totalDeletions = files.reduce((s, f) => s + f.deletions, 0);
+
+            // Categorize files by extension
+            const categories = {};
+            for (const f of files) {
+              const ext = f.filename.includes('.') ? f.filename.split('.').pop() : 'other';
+              const cat = getCategoryForExt(ext);
+              if (!categories[cat]) categories[cat] = [];
+              categories[cat].push(f);
+            }
+
+            function getCategoryForExt(ext) {
+              const map = {
+                // Source code
+                js: 'JavaScript/TypeScript', ts: 'JavaScript/TypeScript',
+                jsx: 'JavaScript/TypeScript', tsx: 'JavaScript/TypeScript',
+                py: 'Python', rb: 'Ruby', go: 'Go', rs: 'Rust',
+                java: 'Java', kt: 'Kotlin', swift: 'Swift',
+                // Config
+                yml: 'Configuration', yaml: 'Configuration',
+                json: 'Configuration', toml: 'Configuration',
+                ini: 'Configuration', env: 'Configuration',
+                // Docs
+                md: 'Documentation', txt: 'Documentation', rst: 'Documentation',
+                // Styles
+                css: 'Styles', scss: 'Styles', less: 'Styles',
+                // Tests (handled by path check too)
+                spec: 'Tests', test: 'Tests',
+                // Infrastructure
+                tf: 'Infrastructure', hcl: 'Infrastructure',
+                Dockerfile: 'Infrastructure',
+                // Shell
+                sh: 'Shell Scripts', bash: 'Shell Scripts', zsh: 'Shell Scripts',
+              };
+              return map[ext] || 'Other';
+            }
+
+            // Override category for test files based on path
+            for (const f of files) {
+              if (f.filename.match(/(?:test|spec|__tests__|tests)\//i) ||
+                  f.filename.match(/\.(test|spec)\.[jt]sx?$/i)) {
+                const ext = f.filename.includes('.') ? f.filename.split('.').pop() : 'other';
+                const origCat = getCategoryForExt(ext);
+                // Remove from original category and add to Tests
+                if (categories[origCat]) {
+                  categories[origCat] = categories[origCat].filter(x => x.filename !== f.filename);
+                  if (categories[origCat].length === 0) delete categories[origCat];
+                }
+                if (!categories['Tests']) categories['Tests'] = [];
+                if (!categories['Tests'].find(x => x.filename === f.filename)) {
+                  categories['Tests'].push(f);
+                }
+              }
+            }
+
+            // Build file breakdown
+            let breakdown = '';
+            for (const [cat, catFiles] of Object.entries(categories).sort()) {
+              const catAdd = catFiles.reduce((s, f) => s + f.additions, 0);
+              const catDel = catFiles.reduce((s, f) => s + f.deletions, 0);
+              breakdown += `<details>\n<summary>${cat} (${catFiles.length} files, +${catAdd} -${catDel})</summary>\n\n`;
+              breakdown += '| File | Status | +/- |\n|------|--------|-----|\n';
+              for (const f of catFiles) {
+                breakdown += `| \`${f.filename}\` | ${f.status} | +${f.additions} -${f.deletions} |\n`;
+              }
+              breakdown += '\n</details>\n\n';
+            }
+
+            // Build lint checklist based on changed file types
+            const extSet = new Set(files.map(f => f.filename.includes('.') ? f.filename.split('.').pop() : ''));
+            let checklist = '';
+
+            if (extSet.has('ts') || extSet.has('tsx') || extSet.has('js') || extSet.has('jsx')) {
+              checklist += '- [ ] ESLint / Prettier checks pass\n';
+              checklist += '- [ ] No `any` types introduced (TypeScript)\n';
+            }
+            if (extSet.has('py')) {
+              checklist += '- [ ] Ruff / Black formatting passes\n';
+              checklist += '- [ ] Type hints present on public functions\n';
+            }
+            if (extSet.has('swift')) {
+              checklist += '- [ ] SwiftLint passes\n';
+            }
+            if (extSet.has('yml') || extSet.has('yaml')) {
+              checklist += '- [ ] YAML syntax is valid\n';
+            }
+            if (extSet.has('tf') || extSet.has('hcl')) {
+              checklist += '- [ ] Terraform fmt / validate passes\n';
+            }
+            if (extSet.has('md')) {
+              checklist += '- [ ] Markdown lint passes\n';
+            }
+            if (extSet.has('sh') || extSet.has('bash')) {
+              checklist += '- [ ] ShellCheck passes\n';
+            }
+            if (extSet.has('Dockerfile') || files.some(f => f.filename.includes('Dockerfile'))) {
+              checklist += '- [ ] Hadolint passes\n';
+            }
+
+            if (!checklist) {
+              checklist = '- [ ] No automated lint checks identified for changed file types\n';
+            }
+
+            // Compose comment
+            const comment = `${MARKER}
+            ## PR Stats
+
+            | Metric | Value |
+            |--------|-------|
+            | **Files changed** | ${files.length} |
+            | **Additions** | +${totalAdditions} |
+            | **Deletions** | -${totalDeletions} |
+            | **Net change** | ${totalAdditions - totalDeletions >= 0 ? '+' : ''}${totalAdditions - totalDeletions} lines |
+
+            ### File Breakdown
+
+            ${breakdown}
+
+            ### Lint Checklist
+
+            ${checklist}
+            `.split('\n').map(l => l.trimStart()).join('\n');
+
+            // Post or update comment idempotently
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+
+            const existing = comments.find(c => c.body && c.body.includes(MARKER));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: comment,
+              });
+              console.log('Updated existing PR summary comment.');
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: comment,
+              });
+              console.log('Created new PR summary comment.');
+            }
