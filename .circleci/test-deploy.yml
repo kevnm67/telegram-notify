@@ -1,0 +1,168 @@
+# telegram-notify orb — integration tests + publish (continued from config.yml).
+#
+# orb-tools/continue injects the packed orb under the `telegram-notify` key,
+# so the jobs below exercise the real commands against a local Telegram API
+# double (scripts/ci/mock-telegram-server.py). Nothing here talks to Telegram.
+#
+# Publishing:
+#   - every push to main  -> kevnm67/telegram-notify@dev:alpha
+#   - tag vX.Y.Z on main  -> production release kevnm67/telegram-notify@X.Y.Z
+version: 2.1
+
+orbs:
+  orb-tools: circleci/orb-tools@12.5.0
+  telegram-notify: {}
+
+filters: &filters
+  tags:
+    only: /.*/
+
+release_filters: &release_filters
+  branches:
+    ignore: /.*/
+  tags:
+    only: /^v[0-9]+\.[0-9]+\.[0-9]+$/
+
+main_filters: &main_filters
+  branches:
+    only: main
+
+executors:
+  base:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    environment:
+      # Fake credentials: the mock server accepts any token and chat id.
+      TELEGRAM_BOT_TOKEN: "000000000:integration-test-token"
+      TELEGRAM_CHAT_ID: "-1000000000000"
+      MOCK_TELEGRAM_LOG: /tmp/telegram-mock.jsonl
+
+commands:
+  start_mock_telegram:
+    description: Start the local Telegram API double in the background.
+    steps:
+      - run:
+          name: Start mock Telegram API
+          command: ./scripts/ci/mock-telegram-server.py
+          background: true
+      - run:
+          name: Wait for mock Telegram API
+          command: timeout 30 bash -c 'until curl -s -o /dev/null -X POST http://127.0.0.1:8089/bot0/sendMessage; do sleep 1; done'
+
+jobs:
+  integration_test_success:
+    executor: base
+    steps:
+      - checkout
+      - start_mock_telegram
+      - telegram-notify/notify_success:
+          api_base: http://127.0.0.1:8089
+          fail_on_error: true
+          custom_message: "<i>integration: notify_success</i>"
+      - run:
+          name: Assert message delivered
+          command: >-
+            ./scripts/ci/assert-mock-received.sh --count 1
+            --contains "CI Success"
+            --contains "integration: notify_success"
+            --contains "View Build"
+            --field parse_mode=HTML
+            --field chat_id=-1000000000000
+
+  integration_test_always:
+    executor: base
+    steps:
+      - checkout
+      - start_mock_telegram
+      - telegram-notify/notify:
+          event: always
+          chat_id: "12345"
+          api_base: http://127.0.0.1:8089
+          fail_on_error: true
+          thread_id: "7"
+          silent: true
+          mentions: "@kevnm67"
+          include_links: false
+      - run:
+          name: Assert message delivered with options
+          command: >-
+            ./scripts/ci/assert-mock-received.sh --count 1
+            --contains "CI Success"
+            --contains "@kevnm67"
+            --field chat_id=12345
+            --field message_thread_id=7
+            --field disable_notification=true
+
+  integration_test_dry_run:
+    executor: base
+    steps:
+      - checkout
+      - start_mock_telegram
+      - telegram-notify/notify_success:
+          dry_run: true
+          api_base: http://127.0.0.1:8089
+          fail_on_error: true
+      - run:
+          name: Assert nothing was sent
+          command: ./scripts/ci/assert-mock-received.sh --count 0
+
+  integration_test_failure_path:
+    # Drives the failure message end-to-end (error output fetch + HTML escaping)
+    # by running the script with a fake CircleCI API, since a real `when: on_fail`
+    # step would require the job itself to fail.
+    executor: base
+    steps:
+      - checkout
+      - start_mock_telegram
+      - run:
+          name: Simulate a failed job with a stubbed CircleCI API
+          command: ./scripts/ci/simulate-failure-notification.sh
+      - run:
+          name: Assert failure message delivered
+          command: >-
+            ./scripts/ci/assert-mock-received.sh --count 1
+            --contains "CI Failure"
+            --contains "Error Output"
+            --contains "&lt;simulated&gt; build error"
+
+workflows:
+  test_deploy:
+    jobs:
+      - integration_test_success:
+          filters: *filters
+      - integration_test_always:
+          filters: *filters
+      - integration_test_dry_run:
+          filters: *filters
+      - integration_test_failure_path:
+          filters: *filters
+      - orb-tools/pack:
+          name: pack_for_publish
+          filters: *filters
+      - orb-tools/publish:
+          name: publish_dev
+          orb_name: kevnm67/telegram-notify
+          vcs_type: << pipeline.project.type >>
+          pub_type: dev
+          requires:
+            - pack_for_publish
+            - integration_test_success
+            - integration_test_always
+            - integration_test_dry_run
+            - integration_test_failure_path
+          context: orb-publishing
+          filters: *main_filters
+      - orb-tools/publish:
+          name: publish_production
+          orb_name: kevnm67/telegram-notify
+          vcs_type: << pipeline.project.type >>
+          pub_type: production
+          requires:
+            - pack_for_publish
+            - integration_test_success
+            - integration_test_always
+            - integration_test_dry_run
+            - integration_test_failure_path
+          context: orb-publishing
+          filters: *release_filters

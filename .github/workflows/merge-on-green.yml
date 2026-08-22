@@ -1,0 +1,20 @@
+---
+name: Merge on Green
+
+'on':
+  issue_comment:
+    types: [created]
+  pull_request:
+    types: [labeled]
+
+concurrency:
+  group: merge-on-green-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    uses: kevnm67/engineering-toolkit/.github/workflows/reusable-merge-on-green.yml@main

@@ -1,0 +1,23 @@
+---
+name: PR Labeler
+
+'on':
+  # pull_request_target gives actions/labeler write access for fork PRs; the
+  # job checks out nothing and only holds pull-requests: write.
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  label:
+    if: ${{ !contains(github.actor, '[bot]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Apply path-based labels
+        uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          sync-labels: true

@@ -1,0 +1,59 @@
+# Path-based PR auto-labeling (actions/labeler v5+ syntax).
+# Labels must exist in the repo (synced from engineering-toolkit labels.yml + repo extras).
+orb:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/**'
+
+shell:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.sh'
+          - 'tests/test_helper/mock_bin/**'
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'tests/**'
+          - 'scripts/ci/mock-telegram-server.py'
+          - 'scripts/ci/assert-mock-received.sh'
+
+circleci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.circleci/**'
+          - 'scripts/ci/**'
+
+workflows:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/**'
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.md'
+          - 'wiki/**'
+          - 'docs/**'
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'renovate.json'
+          - '.pre-commit-config.yaml'
+
+config:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.qlty/**'
+          - '.markdownlint.yaml'
+          - '.yamllint.yaml'
+          - '.gitignore'
+          - 'Makefile'
+          - '.github/labeler.yml'
+          - '.github/CODEOWNERS'
+
+security:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/SECURITY.md'

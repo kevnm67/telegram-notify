@@ -1,0 +1,25 @@
+description: >
+  Report both outcomes: a green message on success (silent, no sound) and a
+  red message with error output on failure.
+usage:
+  version: 2.1
+  orbs:
+    telegram-notify: kevnm67/telegram-notify@1.0.0
+  jobs:
+    deploy:
+      docker:
+        - image: cimg/base:current
+      steps:
+        - checkout
+        - run: ./deploy.sh
+        - telegram-notify/notify_success:
+            chat_id: "-1001234567890"
+            silent: true
+        - telegram-notify/notify_failure:
+            chat_id: "-1001234567890"
+            mentions: "@oncall"
+  workflows:
+    release:
+      jobs:
+        - deploy:
+            context: telegram

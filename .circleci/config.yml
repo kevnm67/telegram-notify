@@ -1,78 +1,72 @@
+# telegram-notify orb — lint/pack/test pipeline (CircleCI Orb Development Kit).
+#
+# This is a *setup* workflow: once lint, review, shellcheck and the unit
+# tests pass, orb-tools/continue injects the packed orb into
+# .circleci/test-deploy.yml, which runs the integration tests and publishes.
+#
+# Orb versions verified 2026-08-22 via `circleci orb info`:
+#   circleci/orb-tools 12.5.0, circleci/shellcheck 3.4.0, qltysh/qlty-orb 0.1.2
 version: 2.1
+setup: true
 
 orbs:
-  orb-tools: circleci/orb-tools@12.0.4
+  orb-tools: circleci/orb-tools@12.5.0
   shellcheck: circleci/shellcheck@3.4.0
+  qlty: qltysh/qlty-orb@0.1.2
+
+filters: &filters
+  tags:
+    only: /.*/
+
+jobs:
+  unit_tests:
+    docker:
+      # Ubuntu 22.04 ships kcov in apt (24.04 dropped it); see install-test-tools.sh.
+      - image: cimg/base:current-22.04
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Install bats + kcov
+          command: ./scripts/ci/install-test-tools.sh
+      - run:
+          name: Unit tests with coverage
+          command: timeout 600 ./scripts/ci/run-unit-tests.sh --coverage --junit-dir test-results
+      - store_test_results:
+          path: test-results
+      - store_artifacts:
+          path: coverage/bats
+          destination: coverage
+      # kcov's Cobertura lists files relative to src/scripts; qlty needs repo-relative paths.
+      - qlty/coverage_publish:
+          format: cobertura
+          files: coverage/bats/cobertura.xml
+          add_prefix: src/scripts
 
 workflows:
-  lint-pack-validate-publish:
+  lint_pack_test:
     jobs:
-      # Pre-commit hooks and linting
       - orb-tools/lint:
-          filters:
-            branches:
-              ignore: main
-      
-      # Shellcheck the bash scripts
-      - shellcheck/check:
-          dir: src/scripts
-          exclude: SC2148,SC1091  # Ignore shebang and sourcing warnings for orb context
-          filters:
-            branches:
-              ignore: main
-      
-      # Pack and validate the orb
+          filters: *filters
       - orb-tools/pack:
-          filters:
-            branches:
-              ignore: main
-      
+          filters: *filters
       - orb-tools/review:
-          requires:
-            - orb-tools/pack
-          filters:
-            branches:
-              ignore: main
-      
-      # Publish development version for testing
-      - orb-tools/publish:
-          orb_name: kevnm67/ci-failure-notifier
+          orb_name: telegram-notify
+          filters: *filters
+      - shellcheck/check:
+          dir: .
+          filters: *filters
+      - unit_tests:
+          context: qlty-credentials
+          filters: *filters
+      - orb-tools/continue:
+          pipeline_number: << pipeline.number >>
           vcs_type: << pipeline.project.type >>
+          orb_name: telegram-notify
           requires:
             - orb-tools/lint
             - orb-tools/pack
             - orb-tools/review
             - shellcheck/check
-          context: orb-publishing
-          filters:
-            branches:
-              ignore: main
-      
-      # Trigger integration tests (would be added later)
-      - orb-tools/continue:
-          pipeline_number: << pipeline.number >>
-          vcs_type: << pipeline.project.type >>
-          requires:
-            - orb-tools/publish
-          filters:
-            branches:
-              ignore: main
-
-  # Production release workflow
-  release:
-    jobs:
-      - orb-tools/pack:
-          filters:
-            branches:
-              only: main
-      
-      - orb-tools/publish:
-          orb_name: kevnm67/ci-failure-notifier
-          vcs_type: << pipeline.project.type >>
-          pub_type: production
-          requires:
-            - orb-tools/pack
-          context: orb-publishing
-          filters:
-            branches:
-              only: main
+            - unit_tests
+          filters: *filters

@@ -1,0 +1,21 @@
+description: >
+  Send a Telegram message with the failed step's output whenever a job fails.
+  TELEGRAM_BOT_TOKEN and CIRCLE_TOKEN live in the `telegram` context.
+usage:
+  version: 2.1
+  orbs:
+    telegram-notify: kevnm67/telegram-notify@1.0.0
+  jobs:
+    build:
+      docker:
+        - image: cimg/base:current
+      steps:
+        - checkout
+        - run: make build
+        - telegram-notify/notify_failure:
+            chat_id: "-1001234567890"
+  workflows:
+    build:
+      jobs:
+        - build:
+            context: telegram

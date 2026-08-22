@@ -1,0 +1,19 @@
+---
+name: PR Summary
+
+'on':
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+
+concurrency:
+  group: pr-summary-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  summary:
+    if: ${{ !contains(github.actor, '[bot]') }}
+    uses: kevnm67/engineering-toolkit/.github/workflows/reusable-pr-summary.yml@main

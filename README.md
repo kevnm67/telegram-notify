@@ -1,243 +1,303 @@
-# CircleCI Failure Notifier Orb
+# telegram-notify
 
-A CircleCI orb that sends instant Telegram notifications when your CI builds fail, complete with error analysis and context.
+[![CircleCI](https://dl.circleci.com/status-badge/img/gh/kevnm67/telegram-notify/tree/main.svg?style=svg)](https://dl.circleci.com/status-badge/redirect/gh/kevnm67/telegram-notify/tree/main)
+[![Maintainability](https://qlty.sh/badges/QLTY_BADGE_ID/maintainability.svg)](https://qlty.sh/gh/kevnm67/projects/telegram-notify)
+[![Code Coverage](https://qlty.sh/badges/QLTY_BADGE_ID/coverage.svg)](https://qlty.sh/gh/kevnm67/projects/telegram-notify)
+[![CircleCI Orb](https://badges.circleci.com/orbs/kevnm67/telegram-notify.svg)](https://circleci.com/developer/orbs/orb/kevnm67/telegram-notify)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+A CircleCI orb that posts rich **Telegram** messages from your jobs — on
+failure (with the failed step's output pulled from the CircleCI API), on
+success, or always. Pure bash + curl, runs on any Linux/macOS executor, and
+never fails your build.
+
+## Table of Contents
+
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Commands](#commands) — [`notify`](#notify) · [`notify_failure`](#notify_failure) · [`notify_success`](#notify_success)
+- [Parameters](#parameters)
+- [Message Format](#message-format)
+- [Recipes](#recipes)
+- [Architecture](#architecture)
+- [Development](#development)
+- [Releasing](#releasing)
+- [Troubleshooting](#troubleshooting)
+- [Security](#security)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Features
 
-- 🔴 **Instant notifications** when CI jobs fail
-- 📋 **Rich context** including repo, branch, job, and commit info
-- 🐛 **Error analysis** with actual failure output from CircleCI API
-- 📱 **Telegram integration** with HTML formatting
-- 🛡️ **Failure-safe** - never causes additional build failures
-- ⚡ **Zero dependencies** - pure bash, works on any CircleCI executor
+| | |
+| --- | --- |
+| 🔴 **Failure alerts** | `when: on_fail` step with the last *N* lines of the failed step's output |
+| ✅ **Success alerts** | `when: on_success` step, optional `silent` delivery |
+| 🔁 **Always** | one `post-steps` entry reports the real outcome of every job |
+| 🧵 **Topics & mentions** | post into a forum topic, append `@mentions`, add a custom HTML line |
+| 🛡️ **Failure-safe** | exits 0 on delivery errors unless `fail_on_error: true` |
+| 🔒 **Escaped output** | repo/branch/job/commit and log output are HTML-escaped |
+| 🧪 **Tested** | 40 bats unit tests + 4 CircleCI integration jobs against a Telegram API double |
+| 🪶 **Zero deps** | bash + curl (uses `jq`/`python3` when present, falls back otherwise) |
 
 ## Quick Start
 
-### 1. Set Up Telegram Bot
+### 1. Create a Telegram bot
 
-1. Create a Telegram bot via [@BotFather](https://t.me/botfather)
-2. Get your bot token (looks like `123456789:ABCdefGHIjklMNOpqrSTUvwxYZ`)
-3. Get your chat ID:
-   - Message your bot
-   - Visit `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
-   - Find your chat ID in the response
+1. Message [@BotFather](https://t.me/botfather) → `/newbot` → copy the token
+   (`123456789:ABCdef...`).
+2. Add the bot to your group/channel (or message it directly).
+3. Find the chat ID: send a message, then open
+   `https://api.telegram.org/bot<TOKEN>/getUpdates` and read `chat.id`
+   (group/channel IDs are negative, e.g. `-1001234567890`).
 
-### 2. Configure CircleCI Context
+### 2. Create a CircleCI context
 
-Create a CircleCI context (e.g., `ci-notify`) with these environment variables:
+Create a context (e.g. `telegram`) with:
 
-- `TELEGRAM_BOT_TOKEN` - Your Telegram bot token
-- `CIRCLE_TOKEN` - CircleCI API token (for error detail fetching)
+| Variable | Required | Purpose |
+| ---------- | ---------- | --------- |
+| `TELEGRAM_BOT_TOKEN` | yes | Bot token from BotFather |
+| `TELEGRAM_CHAT_ID` | no | Default chat ID (so `chat_id` can be omitted in config) |
+| `CIRCLE_TOKEN` | no | CircleCI API token; enables the error-output block on failures |
 
-### 3. Add to Your Project
+### 3. Use the orb
 
 ```yaml
 version: 2.1
 
 orbs:
-  ci-notify: kevnm67/ci-failure-notifier@0.1.0
+  telegram-notify: kevnm67/telegram-notify@1.0.0
 
 jobs:
   build:
+    docker:
+      - image: cimg/base:current
     steps:
       - checkout
       - run: make build
-      - ci-notify/notify-failure:
-          chat_id: "YOUR_CHAT_ID"
-```
-
-### 4. Alternative: Post-Steps
-
-```yaml
-version: 2.1
-
-orbs:
-  ci-notify: kevnm67/ci-failure-notifier@0.1.0
+      - telegram-notify/notify_failure:
+          chat_id: "-1001234567890"
 
 workflows:
-  build_and_test:
+  build:
     jobs:
       - build:
-          post-steps:
-            - ci-notify/notify-failure:
-                chat_id: "YOUR_CHAT_ID"
-          context:
-            - ci-notify
+          context: telegram
 ```
 
-## Command Reference
+Preview the rendered message without sending anything by adding
+`dry_run: true`.
 
-### `notify-failure`
+## Commands
 
-Sends a Telegram notification when a job fails.
+### `notify`
 
-#### Parameters
+The general command. `event` selects when it fires:
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `chat_id` | string | Yes | - | Telegram chat ID to notify |
-| `max_lines` | integer | No | 50 | Max lines of error output to include |
-| `include_log_link` | boolean | No | true | Include links to build and workflow |
-
-#### Example
+| `event` | Runs | Reports |
+| --------- | ------ | --------- |
+| `failure` (default) | `when: on_fail` | 🔴 with error output |
+| `success` | `when: on_success` | ✅ |
+| `always` | `when: always` | the job's real outcome (a tiny `on_fail` marker step runs first) |
 
 ```yaml
-- ci-notify/notify-failure:
-    chat_id: "8233849210"
-    max_lines: 30
-    include_log_link: false
+- telegram-notify/notify:
+    event: always
+    chat_id: "-1001234567890"
+    custom_message: "<i>nightly suite</i>"
 ```
+
+### `notify_failure`
+
+Shorthand for `notify` with `event: failure`. Accepts every parameter below
+except `event`.
+
+### `notify_success`
+
+Shorthand for `notify` with `event: success`. Accepts every parameter below
+except `event`.
+
+## Parameters
+
+| Parameter | Type | Default | Description |
+| ----------- | ------ | --------- | ------------- |
+| `event` | enum `failure` / `success` / `always` | `failure` | When to send (`notify` only) |
+| `chat_id` | string | `""` | Telegram chat ID; falls back to `$TELEGRAM_CHAT_ID` |
+| `bot_token` | env_var_name | `TELEGRAM_BOT_TOKEN` | Env var holding the bot token |
+| `circle_token` | env_var_name | `CIRCLE_TOKEN` | Env var holding a CircleCI API token (optional) |
+| `max_lines` | integer | `50` | Trailing lines of failed-step output to include |
+| `include_links` | boolean | `true` | Append *View Build \| View Workflow* links |
+| `custom_message` | string | `""` | Extra line under the headline (Telegram HTML allowed, sent verbatim) |
+| `mentions` | string | `""` | Appended verbatim, e.g. `"@alice @bob"` |
+| `thread_id` | string | `""` | Forum topic (`message_thread_id`) |
+| `silent` | boolean | `false` | `disable_notification` |
+| `dry_run` | boolean | `false` | Print the message instead of sending |
+| `fail_on_error` | boolean | `false` | Fail the step if delivery fails |
+| `vcs_type` | enum `github` / `bitbucket` | `github` | VCS segment of the CircleCI v1.1 API path |
+| `api_base` | string | `https://api.telegram.org` | Bot API base URL (proxy / test double) |
+| `step_name` | string | `Telegram notification` | Step name shown in the CircleCI UI |
+
+All parameter names are `snake_case` (enforced by `orb-tools/review`).
 
 ## Message Format
 
-The orb sends rich HTML-formatted messages:
-
-```
+```text
 🔴 CI Failure
+<custom_message>
 
-📁 Repository: my-project
-🌿 Branch: feature/new-feature
+📁 Repository: telegram-notify
+🌿 Branch: feat/retry-logic
 ⚙️ Job: build
 📝 Commit: a1b2c3d4
+👤 Triggered by: kevin
 
 ❌ Error Output:
 make: *** [build] Error 1
 npm ERR! Build failed with exit code 1
-npm ERR! Failed at build step
 
 🔗 View Build | View Workflow
+
+@alice @bob
 ```
 
-## Environment Variables
+- The error block is capped at 3 000 characters and the whole message at
+  Telegram's 4 096-character limit, so `<pre>` tags are never left open.
+- ANSI colour codes are stripped from log output.
+- Branch falls back to `CIRCLE_TAG` for tag builds.
 
-The orb automatically uses these CircleCI built-in environment variables:
+## Recipes
 
-- `CIRCLE_PROJECT_REPONAME` - Repository name
-- `CIRCLE_BRANCH` - Branch name
-- `CIRCLE_JOB` - Job name
-- `CIRCLE_BUILD_NUM` - Build number
-- `CIRCLE_BUILD_URL` - Build URL
-- `CIRCLE_WORKFLOW_ID` - Workflow ID
-- `CIRCLE_SHA1` - Commit SHA
-- `CIRCLE_PROJECT_USERNAME` - GitHub username/org
+More in [`src/examples/`](src/examples/).
 
-## Error Handling
-
-The orb is designed to be failure-safe:
-
-- **Missing tokens**: Skips API calls, sends basic notification
-- **API failures**: Falls back to basic build info
-- **Telegram errors**: Logs error but doesn't fail the build
-- **Long messages**: Automatically truncated to fit Telegram limits (4096 chars)
-
-## Requirements
-
-- CircleCI 2.1+
-- Bash (available on all CircleCI executors)
-- Internet access for API calls
-
-## Permissions
-
-The CircleCI API token needs:
-
-- Read access to your projects
-- Build artifact access (for error output)
-
-## Troubleshooting
-
-### No notifications received
-
-1. Verify `TELEGRAM_BOT_TOKEN` is correct
-2. Check chat ID is correct (should be a string)
-3. Ensure the bot can message your chat
-4. Check CircleCI context is attached to the job
-
-### Missing error details
-
-1. Verify `CIRCLE_TOKEN` is set and has proper permissions
-2. Check the build actually failed (notifications only send on failure)
-3. Some job types may not have accessible output logs
-
-### Message too long
-
-Reduce `max_lines` parameter:
+<details>
+<summary>Report every job in a workflow with one post-step</summary>
 
 ```yaml
-- ci-notify/notify-failure:
-    chat_id: "YOUR_CHAT_ID"
-    max_lines: 20
-```
-
-## Examples
-
-### Basic setup
-
-```yaml
-version: 2.1
-
-orbs:
-  ci-notify: kevnm67/ci-failure-notifier@0.1.0
-
-jobs:
-  test:
-    docker:
-      - image: circleci/node:16
-    steps:
-      - checkout
-      - run: npm test
-      - ci-notify/notify-failure:
-          chat_id: "8233849210"
-
 workflows:
-  test_and_deploy:
+  ci:
     jobs:
       - test:
-          context:
-            - ci-notify
+          context: telegram
+          post-steps:
+            - telegram-notify/notify:
+                event: always
 ```
 
-### Multiple notifications
+</details>
+
+<details>
+<summary>Success + failure with different audiences</summary>
 
 ```yaml
-version: 2.1
-
-orbs:
-  ci-notify: kevnm67/ci-failure-notifier@0.1.0
-
-jobs:
-  build:
-    steps:
-      - checkout
-      - run: make build
-      - ci-notify/notify-failure:
-          chat_id: "8233849210"  # Team chat
-      - ci-notify/notify-failure:
-          chat_id: "-1001234567890"  # Alert channel
+- telegram-notify/notify_success:
+    chat_id: "-1001234567890"
+    silent: true
+- telegram-notify/notify_failure:
+    chat_id: "-1001234567890"
+    mentions: "@oncall"
+    max_lines: 30
 ```
 
-### Custom error output
+</details>
+
+<details>
+<summary>Post into a forum topic</summary>
 
 ```yaml
-- ci-notify/notify-failure:
-    chat_id: "8233849210"
-    max_lines: 100
-    include_log_link: true
+- telegram-notify/notify_failure:
+    chat_id: "-1001234567890"
+    thread_id: "42"
 ```
+
+</details>
+
+<details>
+<summary>Keep secrets out of config</summary>
+
+Set `TELEGRAM_CHAT_ID` in the context and omit `chat_id` entirely. Use a
+differently named token variable with `bot_token: MY_BOT_TOKEN`.
+
+</details>
+
+## Architecture
+
+![Notification flow](docs/architecture/notification_flow.svg)
+
+```text
+src/
+├── @orb.yml                  # orb metadata
+├── commands/
+│   ├── notify.yml            # event-driven command (failure | success | always)
+│   ├── notify_failure.yml    # thin wrapper → notify(event: failure)
+│   └── notify_success.yml    # thin wrapper → notify(event: success)
+├── scripts/
+│   ├── notify.sh             # all logic; sourced by the tests
+│   └── record_failure.sh     # on_fail marker for event: always
+└── examples/                 # usage examples shown in the orb registry
+```
+
+`notify.sh` receives its inputs as `TELEGRAM_NOTIFY_*` environment variables
+(mapped from orb parameters) and CircleCI's `CIRCLE_*` built-ins, fetches
+the failed step's output from the v1.1 API when a token is present, builds an
+HTML message and POSTs it as a URL-encoded form to `sendMessage`. See the
+[wiki Architecture page](https://github.com/kevnm67/telegram-notify/wiki/Architecture)
+for the full walkthrough.
 
 ## Development
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for technical details.
+```bash
+make setup        # brew deps + pre-commit hooks
+make lint         # shellcheck, yamllint, markdownlint, orb pack + validate
+make test         # bats unit suite (tests/notify.bats)
+make coverage     # kcov line coverage (Docker on macOS)
+make validate     # circleci orb pack + validate
+make diagrams     # render docs/architecture/*.d2
+make publish-dev TAG=alpha   # publish kevnm67/telegram-notify@dev:alpha
+```
 
-## License
+CI (`.circleci/config.yml`) follows the CircleCI Orb Development Kit:
+`orb-tools/lint` → `orb-tools/pack` → `orb-tools/review` →
+`shellcheck/check` → `unit_tests` (bats + kcov → qlty coverage) →
+`orb-tools/continue` → `.circleci/test-deploy.yml` (integration jobs against
+a local Telegram API double) → publish.
 
-MIT License. See [LICENSE](LICENSE) for details.
+## Releasing
+
+- Every merge to `main` publishes `kevnm67/telegram-notify@dev:alpha`.
+- Tag `vX.Y.Z` on `main` to publish a production version:
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+Pin consumers to a major (`@1`) or exact version; never `@volatile`.
+
+## Troubleshooting
+
+| Symptom | Check |
+| --------- | ------- |
+| No message at all | Context attached to the job? `TELEGRAM_BOT_TOKEN` set? Step log shows `[telegram-notify] ERROR: ...` |
+| `Bad Request: chat not found` | Bot isn't in the chat, or `chat_id` is wrong (group IDs are negative) |
+| No error-output block | `CIRCLE_TOKEN` missing/insufficient, or the job was cancelled rather than failed |
+| Message truncated | Lower `max_lines`; the orb caps the block at 3 000 chars |
+| `can't parse entities` | `custom_message` contains unbalanced HTML — it is sent verbatim |
+
+Run with `dry_run: true` to print the exact message the orb would send.
+
+## Security
+
+See [`.github/SECURITY.md`](.github/SECURITY.md). Tokens are read from
+environment variables and never logged; interpolated job data is
+HTML-escaped.
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+1. Branch from `main` (`feat/…`, `fix/…`, `chore/…`).
+2. `make lint test` must pass; keep coverage ≥ 85 % on changed lines.
+3. Add/adjust bats tests and README/wiki docs for any parameter change.
+4. Open a PR — CI, Claude review and qlty run automatically; PRs squash-merge.
 
-Issues and feature requests are welcome!
+## License
+
+MIT — see [LICENSE](LICENSE).

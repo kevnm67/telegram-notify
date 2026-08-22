@@ -1,0 +1,19 @@
+---
+name: Wiki Sync
+
+'on':
+  push:
+    branches: [main]
+    paths:
+      - 'wiki/**'
+      - 'docs/architecture/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    uses: kevnm67/engineering-toolkit/.github/workflows/reusable-wiki-sync.yml@main
+    with:
+      wiki-source-path: wiki

@@ -1,0 +1,71 @@
+# telegram-notify orb — notification flow. Render: make diagrams
+direction: right
+
+classes: {
+  node: {
+    style.font-size: 24
+    style.border-radius: 8
+  }
+  edge: {
+    style.font-size: 22
+  }
+}
+
+developer: Developer / Renovate {
+  class: node
+  icon: https://icons.terrastruct.com/dev%2Fgithub.svg
+  shape: image
+}
+
+circleci: CircleCI job {
+  class: node
+  style.font-size: 24
+  icon: https://icons.terrastruct.com/aws%2FManagement%20%26%20Governance%2FAWS-Management-Console_light-bg.svg
+  shape: image
+}
+
+orb: telegram-notify orb {
+  class: node
+  style.font-size: 24
+  style.fill: "#EAF2FB"
+
+  cmd: "notify / notify_failure / notify_success" {
+    class: node
+    shape: rectangle
+  }
+  script: "notify.sh\n(when: on_fail | on_success | always)" {
+    class: node
+    shape: rectangle
+  }
+  marker: "record_failure.sh\n(marker file for event: always)" {
+    class: node
+    shape: rectangle
+    style.stroke-dash: 3
+  }
+  cmd -> script: "params → TELEGRAM_NOTIFY_* env" {class: edge}
+  marker -> script: "job failed?" {class: edge}
+}
+
+cci_api: CircleCI API v1.1 {
+  class: node
+  icon: https://icons.terrastruct.com/aws%2F_General%2FTraditional-server_light-bg.svg
+  shape: image
+}
+
+telegram: Telegram Bot API {
+  class: node
+  icon: https://icons.terrastruct.com/aws%2FApplication%20Integration%2FAmazon-Simple-Notification-Service-SNS_HTTP-Notification_light-bg.svg
+  shape: image
+}
+
+chat: Telegram chat / topic {
+  class: node
+  icon: https://icons.terrastruct.com/aws%2FApplication%20Integration%2FAmazon-Simple-Notification-Service-SNS_light-bg.svg
+  shape: image
+}
+
+developer -> circleci: "push / PR" {class: edge}
+circleci -> orb.cmd: "step (or post-step)" {class: edge}
+orb.script -> cci_api: "GET build → failed step output\n(CIRCLE_TOKEN, optional)" {class: edge}
+orb.script -> telegram: "POST sendMessage\n(HTML, url-encoded form)" {class: edge}
+telegram -> chat: "🔴 failure / ✅ success" {class: edge}

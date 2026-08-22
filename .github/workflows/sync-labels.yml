@@ -1,0 +1,14 @@
+---
+name: Sync Labels
+
+'on':
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  sync:
+    uses: kevnm67/engineering-toolkit/.github/workflows/reusable-sync-labels.yml@main

@@ -1,110 +1,63 @@
-# AGENTS.md - CircleCI Failure Notifier Orb
+# AGENTS.md — telegram-notify orb
 
-## What This Is
+Guidance for AI agents and new contributors. Keep this file in sync with
+`README.md` when parameters, files or workflows change.
 
-A CircleCI orb that sends Telegram notifications when CI builds fail, complete with error context and build details.
+## What this is
 
-## Key Components
+A CircleCI orb (`kevnm67/telegram-notify`) that sends Telegram messages
+from jobs: on failure (with failed-step output from the CircleCI API), on
+success, or always. Bash + curl only.
 
-### Orb Structure
-- **`src/@orb.yml`** - Orb metadata and configuration
-- **`src/commands/notify-failure.yml`** - Main command definition
-- **`src/scripts/notify-failure.sh`** - Core notification logic in bash
+## Layout
 
-### Key Features
-- Runs `when: on_fail` - only executes when jobs fail
-- Fetches actual error output via CircleCI v1.1 API
-- Formats rich HTML messages for Telegram
-- Failure-safe - never causes additional build failures
-- Pure bash - no dependencies, works on any executor
+| Path | Purpose |
+| ------ | --------- |
+| `src/@orb.yml` | Orb metadata |
+| `src/commands/notify.yml` | Event-driven command; the only place parameters → env vars are mapped |
+| `src/commands/notify_failure.yml`, `notify_success.yml` | Thin wrappers over `notify` |
+| `src/scripts/notify.sh` | All logic. `tn_*` functions; `main` guarded by `TELEGRAM_NOTIFY_NO_MAIN` |
+| `src/scripts/record_failure.sh` | `on_fail` marker used by `event: always` |
+| `src/examples/*.yml` | Registry usage examples (`usage:` must be valid 2.1 config) |
+| `tests/notify.bats` | Unit suite; `tests/test_helper/mock_bin/curl` is the curl double |
+| `scripts/ci/*.sh` | Everything CI runs — no inline shell in YAML |
+| `.circleci/config.yml` | Setup workflow (lint/pack/review/shellcheck/unit_tests → continue) |
+| `.circleci/test-deploy.yml` | Integration jobs with the injected orb + publish |
+| `docs/architecture/*.d2` | Diagram source; render with `make diagrams` (never Mermaid/ASCII) |
+| `wiki/` | Synced to the GitHub wiki by `wiki-sync.yml` |
 
-### Required Context Variables
-Users need a CircleCI context with:
-- `TELEGRAM_BOT_TOKEN` - Telegram bot token
-- `CIRCLE_TOKEN` - CircleCI API token for error detail fetching
+## Rules
 
-## Common Tasks
+- Orb parameter/command names are `snake_case` (`orb-tools/review` RC010).
+- Scripts stay failure-safe: exit 0 unless `TELEGRAM_NOTIFY_FAIL_ON_ERROR=true`.
+- Never log tokens. Escape anything interpolated into the message except
+  `custom_message`/`mentions` (documented as trusted).
+- Every new parameter: add to all three command files, `notify.sh`, a bats
+  test, README parameter table, wiki Installation page, CHANGELOG.
+- Versions (orbs, images, hooks, actions) are verified live, pinned, and
+  bumped by Renovate — don't hand-edit to guessed versions.
 
-### Testing Changes
+## Commands
+
 ```bash
-# Validate orb locally
-circleci orb validate src/@orb.yml
-
-# Pack for testing
-circleci orb pack src/ > orb.yml
-
-# Publish dev version
-circleci orb publish orb.yml kevnm67/ci-failure-notifier@dev:first
+make lint          # shellcheck + yamllint + markdownlint + orb validate
+make test          # bats
+make coverage      # kcov (Docker on macOS)
+make validate      # circleci orb pack + validate
+make publish-dev TAG=alpha
 ```
 
-### Debugging Notifications
-The script logs all actions with `[ci-failure-notifier]` prefix. Common issues:
-- Missing `TELEGRAM_BOT_TOKEN` or `CIRCLE_TOKEN`
-- Invalid chat ID format (should be string)
-- API rate limits or network issues
-- Messages exceeding Telegram's 4096 char limit
+## Testing strategy
 
-### Message Format
-```
-🔴 CI Failure
-📁 Repository: repo-name
-🌿 Branch: branch-name  
-⚙️ Job: job-name
-📝 Commit: sha-short
-❌ Error Output: [last N lines of failed step]
-🔗 View Build | View Workflow
-```
+- Unit: source `notify.sh` with `TELEGRAM_NOTIFY_NO_MAIN=1`, call `tn_*`
+  functions, assert on the recorded `curl` arguments (`$MOCK_CURL_LOG`).
+- Integration (CI only): `scripts/ci/mock-telegram-server.py` on `:8089`
+  receives real orb command output; `assert-mock-received.sh` checks it.
+- Failure path: `scripts/ci/simulate-failure-notification.sh` stubs the
+  CircleCI API on `:8090` so the error-output branch runs without failing
+  the job.
 
-## Architecture Notes
+## Release
 
-### Error Collection Flow
-1. Check if `CIRCLE_TOKEN` is available
-2. Call CircleCI v1.1 API: `/project/github/{org}/{repo}/{build_num}`
-3. Parse JSON response to find failed step output URLs
-4. Fetch actual error output from step URLs
-5. Truncate to fit Telegram limits
-6. Send formatted HTML message
-
-### Failure Safety
-- Uses `set +e` - never fail on errors
-- All API calls have fallbacks
-- Messages auto-truncate to 4000 chars (with buffer)
-- Always exits 0 to preserve original build failure
-
-### CircleCI Integration
-- Uses built-in env vars: `CIRCLE_*`
-- Works with `when: on_fail` condition
-- Can be used in steps or post-steps
-- Supports all executor types (Docker, macOS, machine)
-
-## Development Workflow
-
-1. **Local testing**: Use CircleCI CLI for validation
-2. **Dev publishing**: Push branches trigger dev orb versions
-3. **Integration testing**: Test in real CI environments
-4. **Production release**: Merging to main publishes production version
-
-## Troubleshooting
-
-### No notifications
-- Check context is attached to job
-- Verify bot token and chat ID
-- Test bot manually: `curl -X POST https://api.telegram.org/bot<TOKEN>/sendMessage -d '{"chat_id":"<ID>","text":"test"}'`
-
-### Missing error details  
-- Verify `CIRCLE_TOKEN` has project access
-- Check if build actually failed (not cancelled)
-- Some executors may not have accessible logs
-
-### Message truncation
-- Reduce `max_lines` parameter
-- Error output truncated at 4000 chars automatically
-- Consider splitting long errors across multiple notifications
-
-## Files Overview
-
-- **CircleCI Orb**: `src/` directory with standard orb structure
-- **CI Pipeline**: `.circleci/config.yml` for orb development
-- **Documentation**: `README.md`, `ARCHITECTURE.md`  
-- **Config**: `.markdownlint.yaml`, `.pre-commit-config.yaml`
-- **License**: MIT license
+`main` → `@dev:alpha`; tag `vX.Y.Z` → production publish (context
+`orb-publishing`). Update `CHANGELOG.md` before tagging.

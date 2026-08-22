@@ -1,0 +1,155 @@
+description: >
+  Send a Telegram message about the current job. Choose when it fires with
+  `event`: `failure` (default, runs `when: on_fail`), `success` (`when:
+  on_success`) or `always` (runs at the end of every job and reports the
+  job's real outcome). Failure messages include the failed step's output
+  fetched from the CircleCI API when `circle_token` is available.
+
+parameters:
+  event:
+    type: enum
+    enum: [failure, success, always]
+    default: failure
+    description: When to send the notification.
+  chat_id:
+    type: string
+    default: ""
+    description: >
+      Telegram chat ID (user, group or channel, e.g. "-1001234567890"). Falls
+      back to the TELEGRAM_CHAT_ID environment variable when empty so the ID
+      can live in a context instead of the config.
+  bot_token:
+    type: env_var_name
+    default: TELEGRAM_BOT_TOKEN
+    description: Name of the environment variable holding the Telegram bot token.
+  circle_token:
+    type: env_var_name
+    default: CIRCLE_TOKEN
+    description: >
+      Name of the environment variable holding a CircleCI API token used to
+      fetch the failed step's output. Optional: without it the message still
+      sends, just without error output.
+  max_lines:
+    type: integer
+    default: 50
+    description: Maximum number of trailing output lines from the failed step to include.
+  include_links:
+    type: boolean
+    default: true
+    description: Append "View Build | View Workflow" links to the message.
+  custom_message:
+    type: string
+    default: ""
+    description: >
+      Extra text inserted under the headline. Telegram HTML is allowed
+      (<b>, <i>, <code>, <a href>); it is sent as-is, not escaped.
+  mentions:
+    type: string
+    default: ""
+    description: Space-separated Telegram usernames to append (e.g. "@alice @bob").
+  thread_id:
+    type: string
+    default: ""
+    description: Forum topic (message_thread_id) to post into for group chats with topics enabled.
+  silent:
+    type: boolean
+    default: false
+    description: Send without a notification sound (Telegram disable_notification).
+  dry_run:
+    type: boolean
+    default: false
+    description: Print the rendered message to the step output instead of calling Telegram.
+  fail_on_error:
+    type: boolean
+    default: false
+    description: >
+      Fail the step if the notification cannot be sent. Off by default so the
+      orb never masks the original job result.
+  vcs_type:
+    type: enum
+    enum: [github, bitbucket]
+    default: github
+    description: VCS provider used in the CircleCI v1.1 API path when fetching error output.
+  api_base:
+    type: string
+    default: https://api.telegram.org
+    description: Telegram Bot API base URL. Override to point at a proxy or a test double.
+  step_name:
+    type: string
+    default: "Telegram notification"
+    description: Display name of the step in the CircleCI UI.
+
+steps:
+  - when:
+      condition:
+        equal: [always, << parameters.event >>]
+      steps:
+        - run:
+            name: "<< parameters.step_name >> (record outcome)"
+            when: on_fail
+            command: << include(scripts/record_failure.sh) >>
+        - run:
+            name: << parameters.step_name >>
+            when: always
+            environment:
+              TELEGRAM_NOTIFY_EVENT: always
+              TELEGRAM_NOTIFY_CHAT_ID: << parameters.chat_id >>
+              TELEGRAM_NOTIFY_BOT_TOKEN_VAR: << parameters.bot_token >>
+              TELEGRAM_NOTIFY_CIRCLE_TOKEN_VAR: << parameters.circle_token >>
+              TELEGRAM_NOTIFY_MAX_LINES: << parameters.max_lines >>
+              TELEGRAM_NOTIFY_INCLUDE_LINKS: << parameters.include_links >>
+              TELEGRAM_NOTIFY_CUSTOM_MESSAGE: << parameters.custom_message >>
+              TELEGRAM_NOTIFY_MENTIONS: << parameters.mentions >>
+              TELEGRAM_NOTIFY_THREAD_ID: << parameters.thread_id >>
+              TELEGRAM_NOTIFY_SILENT: << parameters.silent >>
+              TELEGRAM_NOTIFY_DRY_RUN: << parameters.dry_run >>
+              TELEGRAM_NOTIFY_FAIL_ON_ERROR: << parameters.fail_on_error >>
+              TELEGRAM_NOTIFY_VCS_TYPE: << parameters.vcs_type >>
+              TELEGRAM_NOTIFY_API_BASE: << parameters.api_base >>
+            command: << include(scripts/notify.sh) >>
+  - when:
+      condition:
+        equal: [failure, << parameters.event >>]
+      steps:
+        - run:
+            name: << parameters.step_name >>
+            when: on_fail
+            environment:
+              TELEGRAM_NOTIFY_EVENT: failure
+              TELEGRAM_NOTIFY_CHAT_ID: << parameters.chat_id >>
+              TELEGRAM_NOTIFY_BOT_TOKEN_VAR: << parameters.bot_token >>
+              TELEGRAM_NOTIFY_CIRCLE_TOKEN_VAR: << parameters.circle_token >>
+              TELEGRAM_NOTIFY_MAX_LINES: << parameters.max_lines >>
+              TELEGRAM_NOTIFY_INCLUDE_LINKS: << parameters.include_links >>
+              TELEGRAM_NOTIFY_CUSTOM_MESSAGE: << parameters.custom_message >>
+              TELEGRAM_NOTIFY_MENTIONS: << parameters.mentions >>
+              TELEGRAM_NOTIFY_THREAD_ID: << parameters.thread_id >>
+              TELEGRAM_NOTIFY_SILENT: << parameters.silent >>
+              TELEGRAM_NOTIFY_DRY_RUN: << parameters.dry_run >>
+              TELEGRAM_NOTIFY_FAIL_ON_ERROR: << parameters.fail_on_error >>
+              TELEGRAM_NOTIFY_VCS_TYPE: << parameters.vcs_type >>
+              TELEGRAM_NOTIFY_API_BASE: << parameters.api_base >>
+            command: << include(scripts/notify.sh) >>
+  - when:
+      condition:
+        equal: [success, << parameters.event >>]
+      steps:
+        - run:
+            name: << parameters.step_name >>
+            when: on_success
+            environment:
+              TELEGRAM_NOTIFY_EVENT: success
+              TELEGRAM_NOTIFY_CHAT_ID: << parameters.chat_id >>
+              TELEGRAM_NOTIFY_BOT_TOKEN_VAR: << parameters.bot_token >>
+              TELEGRAM_NOTIFY_CIRCLE_TOKEN_VAR: << parameters.circle_token >>
+              TELEGRAM_NOTIFY_MAX_LINES: << parameters.max_lines >>
+              TELEGRAM_NOTIFY_INCLUDE_LINKS: << parameters.include_links >>
+              TELEGRAM_NOTIFY_CUSTOM_MESSAGE: << parameters.custom_message >>
+              TELEGRAM_NOTIFY_MENTIONS: << parameters.mentions >>
+              TELEGRAM_NOTIFY_THREAD_ID: << parameters.thread_id >>
+              TELEGRAM_NOTIFY_SILENT: << parameters.silent >>
+              TELEGRAM_NOTIFY_DRY_RUN: << parameters.dry_run >>
+              TELEGRAM_NOTIFY_FAIL_ON_ERROR: << parameters.fail_on_error >>
+              TELEGRAM_NOTIFY_VCS_TYPE: << parameters.vcs_type >>
+              TELEGRAM_NOTIFY_API_BASE: << parameters.api_base >>
+            command: << include(scripts/notify.sh) >>
