@@ -10,6 +10,8 @@
 # without running main (used by the bats test-suite).
 set +e
 set -uo pipefail
+# bash >= 5.2 expands "&" in ${var//pat/rep} to the match; keep replacements literal.
+shopt -u patsub_replacement 2>/dev/null || true
 
 readonly TN_TAG="[telegram-notify]"
 readonly TN_TELEGRAM_MAX_CHARS=4096

@@ -48,7 +48,8 @@ commands:
           background: true
       - run:
           name: Wait for mock Telegram API
-          command: timeout 30 bash -c 'until curl -s -o /dev/null -X POST http://127.0.0.1:8089/bot0/sendMessage; do sleep 1; done'
+          # GET is answered with 501 (not logged); only POST /bot*/sendMessage is recorded.
+          command: timeout 30 bash -c 'until curl -s -o /dev/null http://127.0.0.1:8089/; do sleep 1; done'
 
 jobs:
   integration_test_success:

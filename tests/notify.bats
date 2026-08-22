@@ -319,3 +319,12 @@ setup() {
     text="$(last_sent_text)"
     [ "${#text}" -le 4096 ]
 }
+
+@test "main HTML-escapes angle brackets in error output (patsub_replacement regression)" {
+    export CIRCLE_TOKEN=abc
+    export MOCK_CIRCLE_BUILD_JSON='{"steps":[{"actions":[{"failed":true,"output_url":"https://x/step-output/bad"}]}]}'
+    export MOCK_STEP_OUTPUT='[{"message":"error: <simulated> & done\n"}]'
+    run_script
+    [ "$status" -eq 0 ]
+    [[ "$(last_sent_text)" == *"<pre>error: &lt;simulated&gt; &amp; done</pre>"* ]]
+}
