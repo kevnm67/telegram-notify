@@ -22,6 +22,14 @@ tn_log() {
     echo "${TN_TAG} $*" >&2
 }
 
+# CircleCI renders boolean parameters as 1/0 in `environment:`; accept both.
+tn_is_true() {
+    case "${1:-}" in
+    true | TRUE | True | 1 | yes | on) return 0 ;;
+    *) return 1 ;;
+    esac
+}
+
 # Escape the three characters Telegram's HTML parse mode treats specially.
 tn_html_escape() {
     local s="$1"
@@ -163,7 +171,7 @@ tn_build_message() {
         message+=$'\n\n'"❌ <b>Error Output:</b>"$'\n'"<pre>$(tn_html_escape "$block")</pre>"
     fi
 
-    if [[ "${TELEGRAM_NOTIFY_INCLUDE_LINKS:-true}" == "true" && -n "${CIRCLE_BUILD_URL:-}" ]]; then
+    if tn_is_true "${TELEGRAM_NOTIFY_INCLUDE_LINKS:-true}" && [[ -n "${CIRCLE_BUILD_URL:-}" ]]; then
         message+=$'\n\n'"🔗 <a href=\"${CIRCLE_BUILD_URL}\">View Build</a>"
         if [[ -n "${CIRCLE_WORKFLOW_ID:-}" ]]; then
             message+=" | <a href=\"https://app.circleci.com/pipelines/workflows/${CIRCLE_WORKFLOW_ID}\">View Workflow</a>"
@@ -185,7 +193,7 @@ tn_send_message() {
     local chat_id="${TELEGRAM_NOTIFY_CHAT_ID:-}"
     chat_id="${chat_id:-${TELEGRAM_CHAT_ID:-}}"
 
-    if [[ "${TELEGRAM_NOTIFY_DRY_RUN:-false}" == "true" ]]; then
+    if tn_is_true "${TELEGRAM_NOTIFY_DRY_RUN:-false}"; then
         tn_log "dry run — message not sent:"
         printf '%s\n' "$text"
         return 0
@@ -210,7 +218,7 @@ tn_send_message() {
         --data-urlencode "parse_mode=HTML"
         --data-urlencode "disable_web_page_preview=true"
     )
-    if [[ "${TELEGRAM_NOTIFY_SILENT:-false}" == "true" ]]; then
+    if tn_is_true "${TELEGRAM_NOTIFY_SILENT:-false}"; then
         args+=(--data-urlencode "disable_notification=true")
     fi
     if [[ -n "${TELEGRAM_NOTIFY_THREAD_ID:-}" ]]; then
@@ -245,7 +253,7 @@ main() {
         tn_log "Notification sent (${status})"
         exit 0
     fi
-    if [[ "${TELEGRAM_NOTIFY_FAIL_ON_ERROR:-false}" == "true" ]]; then
+    if tn_is_true "${TELEGRAM_NOTIFY_FAIL_ON_ERROR:-false}"; then
         tn_log "Notification failed and fail_on_error is true"
         exit 1
     fi

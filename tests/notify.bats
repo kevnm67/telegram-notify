@@ -328,3 +328,29 @@ setup() {
     [ "$status" -eq 0 ]
     [[ "$(last_sent_text)" == *"<pre>error: &lt;simulated&gt; &amp; done</pre>"* ]]
 }
+
+@test "boolean parameters accept CircleCI's 1/0 rendering" {
+    TELEGRAM_NOTIFY_INCLUDE_LINKS=0
+    msg="$(tn_build_message success "")"
+    [[ "$msg" != *"View Build"* ]]
+    TELEGRAM_NOTIFY_INCLUDE_LINKS=1
+    msg="$(tn_build_message success "")"
+    [[ "$msg" == *"View Build"* ]]
+    TELEGRAM_NOTIFY_SILENT=1
+    TELEGRAM_NOTIFY_DRY_RUN=0
+    run tn_send_message "hi"
+    [ "$status" -eq 0 ]
+    grep -q 'disable_notification=true' "$MOCK_CURL_LOG"
+    TELEGRAM_NOTIFY_DRY_RUN=1
+    : >"$MOCK_CURL_LOG"
+    run tn_send_message "hi"
+    [ "$status" -eq 0 ]
+    [ ! -s "$MOCK_CURL_LOG" ]
+}
+
+@test "fail_on_error=1 fails the step on delivery errors" {
+    export MOCK_HTTP_CODE=500
+    export TELEGRAM_NOTIFY_FAIL_ON_ERROR=1
+    run_script
+    [ "$status" -eq 1 ]
+}
