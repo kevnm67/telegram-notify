@@ -1,294 +1,116 @@
 ---
+# Inlined from kevnm67/engineering-toolkit (private repo; public repos cannot call
+# private reusable workflows). npm audit job removed (no package.json here).
 name: Repo Audit
-
 'on':
   schedule:
-    - cron: "0 7 * * 1" # Mondays 07:00 UTC
-  workflow_dispatch:
-
+  - cron: 0 7 * * 1
+  workflow_dispatch: null
 permissions:
   contents: read
   issues: write
   pull-requests: write
-# Inlined from kevnm67/engineering-toolkit (private repo; public repos cannot call
-# private reusable workflows). Keep in sync with the reusable-*.yml source.
-
 jobs:
   stale-issues:
     name: Stale Issues & PRs
     runs-on: ubuntu-latest
     timeout-minutes: 5
-
     permissions:
       issues: write
       pull-requests: write
-
     steps:
-      - name: Mark stale issues and PRs
-        uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93 # v11
-        with:
-          stale-issue-message: >
-            This issue has been automatically marked as stale because it has
-            not had recent activity. It will be closed in
-            7 days if no further activity occurs.
-          stale-pr-message: >
-            This pull request has been automatically marked as stale because
-            it has not had recent activity. It will be closed in
-            7 days if no further activity occurs.
-          close-issue-message: >
-            This issue was closed because it has been stale for
-            7 days with no activity.
-          close-pr-message: >
-            This pull request was closed because it has been stale for
-            7 days with no activity.
-          days-before-stale: 30
-          days-before-close: 7
-          exempt-issue-labels: pinned,security,bug
-          exempt-pr-labels: pinned,security,bug
-          stale-issue-label: stale
-          stale-pr-label: stale
+    - name: Mark stale issues and PRs
+      uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93
+      with:
+        stale-issue-message: 'This issue has been automatically marked as stale because it has not had
+          recent activity. It will be closed in 7 days if no further activity occurs.
 
+          '
+        stale-pr-message: 'This pull request has been automatically marked as stale because it has not
+          had recent activity. It will be closed in 7 days if no further activity occurs.
+
+          '
+        close-issue-message: 'This issue was closed because it has been stale for 7 days with no activity.
+
+          '
+        close-pr-message: 'This pull request was closed because it has been stale for 7 days with no activity.
+
+          '
+        days-before-stale: 30
+        days-before-close: 7
+        exempt-issue-labels: pinned,security,bug
+        exempt-pr-labels: pinned,security,bug
+        stale-issue-label: stale
+        stale-pr-label: stale
   stale-branches:
     name: Stale Branches
     runs-on: ubuntu-latest
     timeout-minutes: 5
-
     permissions:
       contents: read
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Find stale branches
-        env:
-          STALE_DAYS: 30
-        run: |
-          {
-            echo "## Stale Branches Report"
-            echo ""
-            echo "Branches with no commits in the last ${STALE_DAYS} days:"
-            echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          cutoff_date=$(date -d "-${STALE_DAYS} days" +%s 2>/dev/null \
-            || date -v "-${STALE_DAYS}d" +%s)
-
-          found=0
-          {
-            echo "| Branch | Last Commit | Author |"
-            echo "| ------ | ----------- | ------ |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          for branch in $(git branch -r --format='%(refname:short)' \
-            | grep -v 'HEAD' \
-            | grep -v 'origin/main' \
-            | grep -v 'origin/master'); do
-
-            last_commit_epoch=$(git log -1 --format='%ct' "$branch" 2>/dev/null || echo "0")
-            last_commit_date=$(git log -1 --format='%ci' "$branch" 2>/dev/null || echo "unknown")
-            last_commit_author=$(git log -1 --format='%an' "$branch" 2>/dev/null || echo "unknown")
-
-            if [ "$last_commit_epoch" -lt "$cutoff_date" ]; then
-              short_branch="${branch#origin/}"
-              echo "| \`${short_branch}\` | ${last_commit_date} | ${last_commit_author} |" >> "$GITHUB_STEP_SUMMARY"
-              found=$((found + 1))
-            fi
-          done
-
-          if [ "$found" -eq 0 ]; then
-            echo "| _No stale branches found_ | | |" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          {
-            echo ""
-            echo "**Total stale branches: ${found}**"
-          } >> "$GITHUB_STEP_SUMMARY"
-          echo "Found ${found} stale branch(es) older than ${STALE_DAYS} days."
-
-  dependency-audit:
-    name: Dependency Audit
-    if: false
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-
-      - name: Detect and audit npm projects
-        id: npm-audit
-        run: |
-          {
-            echo "## Dependency Audit Report"
-            echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          # Find all package.json files (excluding node_modules)
-          npm_projects=$(find . -name 'package.json' -not -path '*/node_modules/*' -not -path '*/.git/*')
-
-          if [ -z "$npm_projects" ]; then
-            echo "No package.json files found. Skipping npm audit." | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          has_vulnerabilities=0
-
-          for pkg in $npm_projects; do
-            dir=$(dirname "$pkg")
-            {
-              echo "### npm audit: \`${dir}\`"
-              echo ""
-            } >> "$GITHUB_STEP_SUMMARY"
-
-            if [ -f "${dir}/package-lock.json" ]; then
-              cd "$dir"
-              # npm audit returns non-zero when vulnerabilities exist
-              if audit_output=$(npm audit --omit=dev 2>&1); then
-                echo "No vulnerabilities found." >> "$GITHUB_STEP_SUMMARY"
-              else
-                {
-                  echo '```'
-                  echo "$audit_output"
-                  echo '```'
-                } >> "$GITHUB_STEP_SUMMARY"
-                has_vulnerabilities=1
-              fi
-              cd "$GITHUB_WORKSPACE"
-            else
-              echo "_Skipped: no package-lock.json found._" >> "$GITHUB_STEP_SUMMARY"
-            fi
-
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-          done
-
-          if [ "$has_vulnerabilities" -eq 1 ]; then
-            echo "::warning::npm audit found vulnerabilities. See job summary for details."
-          fi
-
-      - name: Detect and audit Python projects
-        run: |
-          # Find requirements.txt files
-          req_files=$(find . -name 'requirements*.txt' -not -path '*/.git/*')
-
-          if [ -z "$req_files" ]; then
-            echo "No requirements.txt files found. Skipping pip audit."
-            exit 0
-          fi
-
-          {
-            echo "### pip-audit"
-            echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          pip install pip-audit --quiet
-
-          has_vulnerabilities=0
-          for req in $req_files; do
-            {
-              echo "#### \`${req}\`"
-              echo ""
-            } >> "$GITHUB_STEP_SUMMARY"
-
-            if audit_output=$(pip-audit -r "$req" 2>&1); then
-              echo "No vulnerabilities found." >> "$GITHUB_STEP_SUMMARY"
-            else
-              {
-                echo '```'
-                echo "$audit_output"
-                echo '```'
-              } >> "$GITHUB_STEP_SUMMARY"
-              has_vulnerabilities=1
-            fi
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-          done
-
-          if [ "$has_vulnerabilities" -eq 1 ]; then
-            echo "::warning::pip-audit found vulnerabilities. See job summary for details."
-          fi
-
+    - name: Checkout repository
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+    - name: Find stale branches
+      env:
+        STALE_DAYS: 30
+      run: "{\n  echo \"## Stale Branches Report\"\n  echo \"\"\n  echo \"Branches with no commits in\
+        \ the last ${STALE_DAYS} days:\"\n  echo \"\"\n} >> \"$GITHUB_STEP_SUMMARY\"\n\ncutoff_date=$(date\
+        \ -d \"-${STALE_DAYS} days\" +%s 2>/dev/null \\\n  || date -v \"-${STALE_DAYS}d\" +%s)\n\nfound=0\n\
+        {\n  echo \"| Branch | Last Commit | Author |\"\n  echo \"| ------ | ----------- | ------ |\"\n\
+        } >> \"$GITHUB_STEP_SUMMARY\"\n\nfor branch in $(git branch -r --format='%(refname:short)' \\\n\
+        \  | grep -v 'HEAD' \\\n  | grep -v 'origin/main' \\\n  | grep -v 'origin/master'); do\n\n  last_commit_epoch=$(git\
+        \ log -1 --format='%ct' \"$branch\" 2>/dev/null || echo \"0\")\n  last_commit_date=$(git log -1\
+        \ --format='%ci' \"$branch\" 2>/dev/null || echo \"unknown\")\n  last_commit_author=$(git log\
+        \ -1 --format='%an' \"$branch\" 2>/dev/null || echo \"unknown\")\n\n  if [ \"$last_commit_epoch\"\
+        \ -lt \"$cutoff_date\" ]; then\n    short_branch=\"${branch#origin/}\"\n    echo \"| \\`${short_branch}\\\
+        ` | ${last_commit_date} | ${last_commit_author} |\" >> \"$GITHUB_STEP_SUMMARY\"\n    found=$((found\
+        \ + 1))\n  fi\ndone\n\nif [ \"$found\" -eq 0 ]; then\n  echo \"| _No stale branches found_ | |\
+        \ |\" >> \"$GITHUB_STEP_SUMMARY\"\nfi\n\n{\n  echo \"\"\n  echo \"**Total stale branches: ${found}**\"\
+        \n} >> \"$GITHUB_STEP_SUMMARY\"\necho \"Found ${found} stale branch(es) older than ${STALE_DAYS}\
+        \ days.\"\n"
   todo-check:
     name: Orphaned TODOs
-    if: true
     runs-on: ubuntu-latest
     timeout-minutes: 5
-
     permissions:
       contents: read
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-
-      - name: Find orphaned TODOs
-        run: |
-          {
-            echo "## Orphaned TODO Report"
-            echo ""
-            echo "TODOs/FIXMEs/HACKs without a ticket reference (e.g., JIRA-123, #123):"
-            echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          # Match TODO/FIXME/HACK that do NOT have a ticket-like reference nearby
-          # Ticket patterns: PROJ-123, #123, GH-123
-          orphans=$(grep -rn \
-            --include='*.ts' --include='*.tsx' --include='*.js' --include='*.jsx' \
-            --include='*.py' --include='*.rb' --include='*.go' --include='*.rs' \
-            --include='*.java' --include='*.kt' --include='*.swift' \
-            --include='*.sh' --include='*.bash' --include='*.yml' --include='*.yaml' \
-            -E '(TODO|FIXME|HACK|XXX)\b' . \
-            --exclude-dir=node_modules \
-            --exclude-dir=.git \
-            --exclude-dir=vendor \
-            --exclude-dir=__pycache__ \
-            --exclude-dir=.venv \
-            2>/dev/null \
-            | grep -v -E '[A-Z]{2,10}-[0-9]+|#[0-9]+|GH-[0-9]+' \
-            || true)
-
-          if [ -z "$orphans" ]; then
-            echo "No orphaned TODOs found." | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          count=$(echo "$orphans" | wc -l | tr -d ' ')
-          {
-            echo "**Found ${count} orphaned TODO(s):**"
-            echo ""
-            echo '```'
-            echo "$orphans"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          echo "::warning::Found ${count} orphaned TODO(s) without ticket references."
-
+    - name: Checkout repository
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - name: Find orphaned TODOs
+      run: "{\n  echo \"## Orphaned TODO Report\"\n  echo \"\"\n  echo \"TODOs/FIXMEs/HACKs without a\
+        \ ticket reference (e.g., JIRA-123, #123):\"\n  echo \"\"\n} >> \"$GITHUB_STEP_SUMMARY\"\n\n#\
+        \ Match TODO/FIXME/HACK that do NOT have a ticket-like reference nearby\n# Ticket patterns: PROJ-123,\
+        \ #123, GH-123\norphans=$(grep -rn \\\n  --include='*.ts' --include='*.tsx' --include='*.js' --include='*.jsx'\
+        \ \\\n  --include='*.py' --include='*.rb' --include='*.go' --include='*.rs' \\\n  --include='*.java'\
+        \ --include='*.kt' --include='*.swift' \\\n  --include='*.sh' --include='*.bash' --include='*.yml'\
+        \ --include='*.yaml' \\\n  -E '(TODO|FIXME|HACK|XXX)\\b' . \\\n  --exclude-dir=node_modules \\\
+        \n  --exclude-dir=.git \\\n  --exclude-dir=vendor \\\n  --exclude-dir=__pycache__ \\\n  --exclude-dir=.venv\
+        \ \\\n  2>/dev/null \\\n  | grep -v -E '[A-Z]{2,10}-[0-9]+|#[0-9]+|GH-[0-9]+' \\\n  || true)\n\
+        \nif [ -z \"$orphans\" ]; then\n  echo \"No orphaned TODOs found.\" | tee -a \"$GITHUB_STEP_SUMMARY\"\
+        \n  exit 0\nfi\n\ncount=$(echo \"$orphans\" | wc -l | tr -d ' ')\n{\n  echo \"**Found ${count}\
+        \ orphaned TODO(s):**\"\n  echo \"\"\n  echo '```'\n  echo \"$orphans\"\n  echo '```'\n} >> \"\
+        $GITHUB_STEP_SUMMARY\"\n\necho \"::warning::Found ${count} orphaned TODO(s) without ticket references.\"\
+        \n"
   secret-scan:
     name: Secret Scan
-    if: true
     runs-on: ubuntu-latest
     timeout-minutes: 10
-
     permissions:
       contents: read
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Run trufflehog secret scan
-        uses: trufflesecurity/trufflehog@bcfcf73aaf4759d4dadc2783177c245a02792318 # v3.97.0
-        with:
-          extra_args: --only-verified
+    - name: Checkout repository
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+    - name: Run trufflehog secret scan
+      uses: trufflesecurity/trufflehog@bcfcf73aaf4759d4dadc2783177c245a02792318
+      with:
+        extra_args: --only-verified

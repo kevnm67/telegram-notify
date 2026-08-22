@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   claude-fix:
-    if: github.event.pull_request.draft == false
+    if: github.event.pull_request.draft == false && !contains(github.actor, '[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
