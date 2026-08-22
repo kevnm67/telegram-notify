@@ -9,10 +9,19 @@
 version: 2.1
 setup: true
 
+# Manual dogfooding: trigger with {"parameters": {"live_test": true}} to run the
+# published dev orb against the real Telegram API (context ci_notify).
+parameters:
+  live_test:
+    type: boolean
+    default: false
+
 orbs:
   orb-tools: circleci/orb-tools@12.5.0
   shellcheck: circleci/shellcheck@3.4.0
   qlty: qltysh/qlty-orb@0.1.2
+  # Consumes the last dev publish of THIS orb (renovate: ignore — dev tag, not semver).
+  telegram-notify: kevnm67/telegram-notify@dev:alpha
 
 filters: &filters
   tags:
@@ -43,8 +52,55 @@ jobs:
           files: coverage/bats/cobertura.xml
           add_prefix: src/scripts
 
+  live_success:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Pretend to build
+          command: echo "build ok"
+      - telegram-notify/notify_success:
+          custom_message: "<i>live test: notify_success via @dev:alpha</i>"
+          silent: true
+          fail_on_error: true
+
+  live_failure:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Fail on purpose
+          command: ./scripts/ci/fail-on-purpose.sh
+      - telegram-notify/notify_failure:
+          custom_message: "<i>live test: notify_failure via @dev:alpha (expected red job)</i>"
+          max_lines: 10
+          mentions: "@kevnm67"
+
 workflows:
+  live_test:
+    when: << pipeline.parameters.live_test >>
+    jobs:
+      - live_success:
+          context: ci_notify
+      - live_failure:
+          context: ci_notify
+      - live_success:
+          name: live_always_post_step
+          context: ci_notify
+          post-steps:
+            - telegram-notify/notify:
+                event: always
+                custom_message: "<i>live test: event=always as a post-step</i>"
+                include_links: false
+                fail_on_error: true
+
   lint_pack_test:
+    when:
+      not: << pipeline.parameters.live_test >>
     jobs:
       - orb-tools/lint:
           filters: *filters
