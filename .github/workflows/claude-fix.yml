@@ -1,4 +1,6 @@
 ---
+# Inlined from kevnm67/engineering-toolkit (private repo; public repos cannot call
+# private reusable workflows). Keep in sync with the reusable-*.yml source.
 name: Claude Auto-Fix
 
 'on':
@@ -9,16 +11,86 @@ concurrency:
   group: claude-fix-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
-permissions:
-  contents: write
-  pull-requests: write
-  issues: read
-  id-token: write
-  actions: read
 
 jobs:
-  fix:
-    if: ${{ !contains(github.actor, '[bot]') }}
-    uses: kevnm67/engineering-toolkit/.github/workflows/reusable-claude-fix.yml@main
-    secrets:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  claude-fix:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: read
+      id-token: write
+      actions: read
+
+    steps:
+      - name: Checkout repository
+        # persist-credentials: true is required — this job pushes fixes back to the PR branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: true
+
+      - name: Apply fixes with Claude
+        id: claude-fix
+        uses: anthropics/claude-code-action@9d7150bc8a3dae8149739a88019d192b579ad90c # v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          track_progress: true
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            BRANCH: ${{ github.event.pull_request.head.ref }}
+
+            You are an auto-fix agent. Your job is to read review feedback and apply fixes.
+
+            ## Process
+
+            1. Gather feedback comments:
+               - Run `gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments` to get review comments
+               - Run `gh pr view ${{ github.event.pull_request.number }} --comments --json comments` to get PR comments
+               - Look for comments containing <!-- claude-review --> (Claude review feedback)
+               - Look for comments from Qlty or other code quality bots
+
+            2. Read the current diff:
+               - Run `gh pr diff ${{ github.event.pull_request.number }}` to understand current changes
+
+            3. Apply fixes:
+               - For each actionable piece of feedback, apply the fix using Edit or Write tools
+               - Focus on Security findings and Correctness issues first
+               - Skip purely stylistic suggestions unless they are clear improvements
+               - Do NOT fix things that were not flagged in review comments
+
+            4. Commit changes:
+               - Stage only the files you modified: `git add <file1> <file2> ...`
+               - Commit with message: `fix: apply review feedback from automated analysis`
+               - Push to the PR branch: `git push origin ${{ github.event.pull_request.head.ref }}`
+
+            5. Post a summary comment:
+               Use `gh pr comment ${{ github.event.pull_request.number }} --body "..."` with this format:
+
+               <!-- claude-fix -->
+               ## Auto-Fix Summary
+
+               **Fixes applied:** N
+
+               | File | Change | Source |
+               |------|--------|--------|
+               | `path/to/file` | Brief description | Claude Review / Qlty |
+
+               **Skipped:** List any feedback that was intentionally not addressed and why.
+
+               If no actionable feedback was found, post:
+
+               <!-- claude-fix -->
+               ## Auto-Fix Summary
+
+               No actionable fixes found in review feedback. All clear.
+
+          claude_args: >-
+            --allowedTools
+            "Edit,Write,Read,Glob,Grep,Bash(git:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(gh api:*)"

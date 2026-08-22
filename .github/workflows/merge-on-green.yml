@@ -1,3 +1,5 @@
+# Inlined from kevnm67/engineering-toolkit (private repo; public repos cannot call
+# private reusable workflows). Keep in sync with the reusable-*.yml source.
 ---
 name: Merge on Green
 
@@ -15,6 +17,269 @@ permissions:
   contents: write
   pull-requests: write
 
+
 jobs:
-  merge:
-    uses: kevnm67/engineering-toolkit/.github/workflows/reusable-merge-on-green.yml@main
+  queue-merge:
+    if: >-
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, 'LGTM')) ||
+      (github.event_name == 'pull_request' &&
+       github.event.label.name == 'automerge')
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    permissions:
+      pull-requests: write
+      contents: read
+
+    outputs:
+      should-merge: ${{ steps.validate.outputs.should-merge }}
+      pr-number: ${{ steps.validate.outputs.pr-number }}
+
+    steps:
+      - name: Validate merge eligibility
+        id: validate
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            let prNumber;
+
+            if (context.eventName === 'issue_comment') {
+              prNumber = context.payload.issue.number;
+
+              // Check commenter has write access
+              const commenter = context.payload.comment.user.login;
+              try {
+                const { data: permLevel } = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  username: commenter,
+                });
+
+                const allowed = ['admin', 'write', 'maintain'];
+                if (!allowed.includes(permLevel.permission)) {
+                  console.log(`${commenter} has ${permLevel.permission} access. Write access required.`);
+                  core.setOutput('should-merge', 'false');
+                  return;
+                }
+              } catch (err) {
+                console.log(`Could not verify permissions for ${commenter}: ${err.message}`);
+                core.setOutput('should-merge', 'false');
+                return;
+              }
+            } else {
+              prNumber = context.payload.pull_request.number;
+            }
+
+            // Fetch PR details
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+
+            if (pr.draft) {
+              console.log('PR is a draft. Skipping.');
+              core.setOutput('should-merge', 'false');
+              return;
+            }
+
+            if (pr.mergeable_state === 'dirty') {
+              console.log('PR has merge conflicts. Skipping.');
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: 'Cannot auto-merge: PR has conflicts. Please resolve them first.',
+              });
+              core.setOutput('should-merge', 'false');
+              return;
+            }
+
+            // Add automerge label if triggered via LGTM comment
+            if (context.eventName === 'issue_comment') {
+              try {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  labels: ['automerge'],
+                });
+              } catch (err) {
+                console.log(`Could not add label: ${err.message}`);
+              }
+            }
+
+            core.setOutput('should-merge', 'true');
+            core.setOutput('pr-number', String(prNumber));
+
+  auto-merge:
+    needs: queue-merge
+    if: needs.queue-merge.outputs.should-merge == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Wait for checks and squash merge
+        uses: actions/github-script@v9
+        env:
+          PR_NUMBER: ${{ needs.queue-merge.outputs.pr-number }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt(process.env.PR_NUMBER, 10);
+            const maxWaitMs = 10 * 60 * 1000; // 10 minutes
+            const pollIntervalMs = 30 * 1000;  // 30 seconds
+            const startTime = Date.now();
+
+            async function getCheckStatus() {
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+              });
+
+              const ref = pr.head.sha;
+
+              // Get combined status (legacy status API)
+              const { data: status } = await github.rest.repos.getCombinedStatusForRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref,
+              });
+
+              // Get check runs (checks API)
+              const { data: checks } = await github.rest.checks.listForRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref,
+              });
+
+              // Filter out our own workflow
+              const checkRuns = checks.check_runs.filter(
+                cr => cr.name !== 'auto-merge' && cr.name !== 'queue-merge'
+              );
+
+              const pendingChecks = checkRuns.filter(cr => cr.status !== 'completed');
+              const failedChecks = checkRuns.filter(
+                cr => cr.status === 'completed' && !['success', 'neutral', 'skipped'].includes(cr.conclusion)
+              );
+
+              const statusPending = status.state === 'pending' && status.statuses.length > 0;
+              const statusFailed = status.state === 'failure' || status.state === 'error';
+
+              return {
+                pending: pendingChecks.length > 0 || statusPending,
+                failed: failedChecks.length > 0 || statusFailed,
+                failedNames: failedChecks.map(cr => cr.name),
+              };
+            }
+
+            while (true) {
+              const elapsed = Date.now() - startTime;
+              if (elapsed >= maxWaitMs) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  body: 'Auto-merge timed out after 10 minutes waiting for checks to pass.',
+                });
+
+                // Remove automerge label
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: prNumber,
+                    name: 'automerge',
+                  });
+                } catch (e) { /* label may not exist */ }
+
+                core.setFailed('Timed out waiting for checks');
+                return;
+              }
+
+              const result = await getCheckStatus();
+
+              if (result.failed) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  body: `Auto-merge aborted: checks failed (${result.failedNames.join(', ')}).`,
+                });
+
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: prNumber,
+                    name: 'automerge',
+                  });
+                } catch (e) { /* label may not exist */ }
+
+                core.setFailed('Checks failed');
+                return;
+              }
+
+              if (!result.pending) {
+                // All checks passed - squash merge
+                try {
+                  await github.rest.pulls.merge({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: prNumber,
+                    merge_method: 'squash',
+                  });
+
+                  console.log('Squash merge successful.');
+
+                  // Remove automerge label
+                  try {
+                    await github.rest.issues.removeLabel({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number: prNumber,
+                      name: 'automerge',
+                    });
+                  } catch (e) { /* label may not exist */ }
+
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: prNumber,
+                    body: 'Auto-merge complete. PR squash-merged successfully.',
+                  });
+
+                  return;
+                } catch (err) {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: prNumber,
+                    body: `Auto-merge failed: ${err.message}`,
+                  });
+
+                  try {
+                    await github.rest.issues.removeLabel({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number: prNumber,
+                      name: 'automerge',
+                    });
+                  } catch (e) { /* label may not exist */ }
+
+                  core.setFailed(`Merge failed: ${err.message}`);
+                  return;
+                }
+              }
+
+              console.log(`Checks still pending. Waiting ${pollIntervalMs / 1000}s... (${Math.round(elapsed / 1000)}s elapsed)`);
+              await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+            }

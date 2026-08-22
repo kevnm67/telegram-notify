@@ -14,6 +14,15 @@ permissions:
 
 jobs:
   sync:
-    uses: kevnm67/engineering-toolkit/.github/workflows/reusable-wiki-sync.yml@main
-    with:
-      wiki-source-path: wiki
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Sync wiki pages and rendered diagrams
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_SLUG: ${{ github.repository }}
+        run: ./scripts/ci/sync-wiki.sh --token-auth
