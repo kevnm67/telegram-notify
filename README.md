@@ -165,6 +165,9 @@ npm ERR! Build failed with exit code 1
   Telegram's 4 096-character limit, so `<pre>` tags are never left open.
 - ANSI colour codes are stripped from log output.
 - Branch falls back to `CIRCLE_TAG` for tag builds.
+- `custom_message` and `mentions` are sent **verbatim** (Telegram HTML allowed). Only feed them
+  trusted config — never untrusted pipeline values such as `<< pipeline.git.commit_message >>`
+  on a repo that builds fork PRs, or a contributor can inject links/markup into your chat.
 
 ## Recipes
 

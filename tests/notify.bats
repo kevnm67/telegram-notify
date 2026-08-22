@@ -354,3 +354,13 @@ setup() {
     run_script
     [ "$status" -eq 1 ]
 }
+
+@test "long custom message shrinks the error block so <pre> is never cut" {
+    TELEGRAM_NOTIFY_CUSTOM_MESSAGE="$(head -c 2500 /dev/zero | tr '\0' 'c')"
+    TELEGRAM_NOTIFY_MENTIONS="@a @b"
+    long="$(head -c 5000 /dev/zero | tr '\0' 'x')"
+    msg="$(tn_build_message failure "$long")"
+    [ "${#msg}" -le 4096 ]
+    [[ "$msg" == *"…</pre>"* ]]
+    [[ "$msg" == *$'\n\n@a @b' ]]
+}

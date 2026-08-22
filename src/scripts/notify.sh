@@ -17,6 +17,7 @@ readonly TN_TAG="[telegram-notify]"
 readonly TN_TELEGRAM_MAX_CHARS=4096
 readonly TN_ERROR_BLOCK_MAX_CHARS=3000
 TN_MARKER_FILE="${TMPDIR:-/tmp}/telegram_notify_job_failed"
+: "${TELEGRAM_NOTIFY_MENTIONS:=}"
 
 tn_log() {
     echo "${TN_TAG} $*" >&2
@@ -166,8 +167,15 @@ tn_build_message() {
     fi
 
     if [[ -n "$error_output" ]]; then
-        local block
-        block=$(tn_truncate "$error_output" "$TN_ERROR_BLOCK_MAX_CHARS")
+        # Size the block so the finished message (with links and mentions) stays
+        # under Telegram's limit; the final safety truncation must never slice a tag.
+        local block budget=$TN_ERROR_BLOCK_MAX_CHARS
+        local overhead=$((${#message} + ${#TELEGRAM_NOTIFY_MENTIONS} + 400))
+        if ((TN_TELEGRAM_MAX_CHARS - overhead < budget)); then
+            budget=$((TN_TELEGRAM_MAX_CHARS - overhead))
+        fi
+        ((budget < 0)) && budget=0
+        block=$(tn_truncate "$error_output" "$budget")
         message+=$'\n\n'"❌ <b>Error Output:</b>"$'\n'"<pre>$(tn_html_escape "$block")</pre>"
     fi
 
