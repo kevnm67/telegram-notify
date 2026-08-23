@@ -1,0 +1,26 @@
+description: >
+  Post a formatted test summary (pass / fail / skip counts, runtime and the
+  failed test names) after every test job. Requires store_test_results to
+  run before the notification and CIRCLE_TOKEN in the context.
+usage:
+  version: 2.1
+  orbs:
+    telegram-notify: kevnm67/telegram-notify@1.0.0
+  jobs:
+    test:
+      docker:
+        - image: cimg/node:current
+      steps:
+        - checkout
+        - run: npm test -- --reporters=jest-junit
+        - store_test_results:
+            path: test-results
+        - telegram-notify/notify:
+            event: always
+            template: test_summary
+            max_failed_tests: 8
+  workflows:
+    ci:
+      jobs:
+        - test:
+            context: telegram

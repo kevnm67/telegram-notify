@@ -2,13 +2,15 @@
 # Assert what the mock Telegram server received during an integration test.
 #
 # Usage:
-#   assert-mock-received.sh --count N [--contains TEXT]... [--field key=value]...
+#   assert-mock-received.sh [--count N] [--contains TEXT]... [--field key=value]... [--field-contains key=substr]...
+# Counts every recorded call (sendMessage and sendDocument); --contains/--field inspect the last one.
 set -euo pipefail
 
 LOG_PATH="${MOCK_TELEGRAM_LOG:-/tmp/telegram-mock.jsonl}"
 EXPECT_COUNT=""
 CONTAINS=()
 FIELDS=()
+FIELD_CONTAINS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -22,6 +24,10 @@ while [[ $# -gt 0 ]]; do
         ;;
     --field)
         FIELDS+=("$2")
+        shift
+        ;;
+    --field-contains)
+        FIELD_CONTAINS+=("$2")
         shift
         ;;
     *)
@@ -60,6 +66,15 @@ for kv in "${FIELDS[@]}"; do
     got=$(last_field "$key")
     if [[ "$got" != "$want" ]]; then
         echo "FAIL: field ${key}: expected '${want}', got '${got}'" >&2
+        exit 1
+    fi
+done
+for kv in "${FIELD_CONTAINS[@]}"; do
+    key="${kv%%=*}"
+    want="${kv#*=}"
+    got=$(last_field "$key")
+    if [[ "$got" != *"$want"* ]]; then
+        echo "FAIL: field ${key}: expected to contain '${want}', got '${got}'" >&2
         exit 1
     fi
 done

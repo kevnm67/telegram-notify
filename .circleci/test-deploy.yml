@@ -39,6 +39,14 @@ executors:
       MOCK_TELEGRAM_LOG: /tmp/telegram-mock.jsonl
 
 commands:
+  start_api_stubs:
+    description: Start stubbed CircleCI (:8090) and Anthropic (:8091) APIs in the background.
+    steps:
+      - run:
+          name: Start CircleCI/Anthropic API stubs
+          command: ./scripts/ci/stub-circleci-api.sh
+          background: true
+
   start_mock_telegram:
     description: Start the local Telegram API double in the background.
     steps:
@@ -67,9 +75,9 @@ jobs:
             ./scripts/ci/assert-mock-received.sh --count 1
             --contains "CI Success"
             --contains "integration: notify_success"
-            --contains "View Build"
             --field parse_mode=HTML
             --field chat_id=-1000000000000
+            --field-contains reply_markup=inline_keyboard
 
   integration_test_always:
     executor: base
@@ -109,23 +117,53 @@ jobs:
           command: ./scripts/ci/assert-mock-received.sh --count 0
 
   integration_test_failure_path:
-    # Drives the failure message end-to-end (error output fetch + HTML escaping)
-    # by running the script with a fake CircleCI API, since a real `when: on_fail`
-    # step would require the job itself to fail.
+    # Drives the failure message end-to-end (error output fetch, duration,
+    # HTML escaping, buttons, attach_log) against stubbed CircleCI APIs, since
+    # a real `when: on_fail` step would require the job itself to fail.
     executor: base
     steps:
       - checkout
       - start_mock_telegram
+      - start_api_stubs
       - run:
-          name: Simulate a failed job with a stubbed CircleCI API
-          command: ./scripts/ci/simulate-failure-notification.sh
+          name: Simulate a failed job (basic template + attach_log)
+          command: ./scripts/ci/simulate-failure-notification.sh basic TELEGRAM_NOTIFY_ATTACH_LOG=true
       - run:
-          name: Assert failure message delivered
-          command: >-
-            ./scripts/ci/assert-mock-received.sh --count 1
-            --contains "CI Failure"
-            --contains "Error Output"
-            --contains "&lt;simulated&gt; build error"
+          name: Assert failure message + log document delivered
+          command: ./scripts/ci/assert-integration-templates.sh basic
+
+  integration_test_templates:
+    # test_summary, insights and ai_summary against stubbed CircleCI + Anthropic APIs.
+    executor: base
+    steps:
+      - checkout
+      - start_mock_telegram
+      - start_api_stubs
+      - run:
+          name: test_summary
+          command: ./scripts/ci/simulate-failure-notification.sh test_summary && ./scripts/ci/assert-integration-templates.sh test_summary
+      - run:
+          name: insights
+          command: ./scripts/ci/simulate-failure-notification.sh insights && ./scripts/ci/assert-integration-templates.sh insights
+      - run:
+          name: ai_summary
+          command: ./scripts/ci/simulate-failure-notification.sh ai_summary && ./scripts/ci/assert-integration-templates.sh ai_summary
+      - telegram-notify/notify_success:
+          template: custom
+          custom_body: "<b>{{CIRCLE_JOB}}</b> on {{CIRCLE_BRANCH}} {{NOT_SET_VAR}}"
+          api_base: http://127.0.0.1:8089
+          fail_on_error: true
+          buttons: false
+      - run:
+          name: custom template
+          command: ./scripts/ci/assert-integration-templates.sh custom
+      - telegram-notify/notify_success:
+          branch_pattern: "never-matches-.*"
+          api_base: http://127.0.0.1:8089
+          fail_on_error: true
+      - run:
+          name: branch_pattern filter skips delivery
+          command: ./scripts/ci/assert-integration-templates.sh filtered
 
 workflows:
   test_deploy:
@@ -137,6 +175,8 @@ workflows:
       - integration_test_dry_run:
           filters: *filters
       - integration_test_failure_path:
+          filters: *filters
+      - integration_test_templates:
           filters: *filters
       - orb-tools/pack:
           name: pack_for_publish
@@ -152,6 +192,7 @@ workflows:
             - integration_test_always
             - integration_test_dry_run
             - integration_test_failure_path
+            - integration_test_templates
           context: orb-publishing
           filters: *main_filters
       - orb-tools/publish:
@@ -165,5 +206,6 @@ workflows:
             - integration_test_always
             - integration_test_dry_run
             - integration_test_failure_path
+            - integration_test_templates
           context: orb-publishing
           filters: *release_filters

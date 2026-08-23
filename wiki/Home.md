@@ -1,7 +1,8 @@
 # telegram-notify
 
 CircleCI orb for rich Telegram notifications — failure (with error output),
-success, or always.
+success, or always — with templates for test summaries, CI insights, AI
+failure analysis and releases.
 
 ## Contents
 
@@ -25,4 +26,6 @@ orbs:
 steps:
   - telegram-notify/notify_failure:
       chat_id: "-1001234567890"
+      template: ai_summary
+      attach_log: true
 ```

@@ -14,9 +14,12 @@ success, or always. Bash + curl only.
 | Path | Purpose |
 | ------ | --------- |
 | `src/@orb.yml` | Orb metadata |
-| `src/commands/notify.yml` | Event-driven command; the only place parameters → env vars are mapped |
-| `src/commands/notify_failure.yml`, `notify_success.yml` | Thin wrappers over `notify` |
-| `src/scripts/notify.sh` | All logic. `tn_*` functions; `main` guarded by `TELEGRAM_NOTIFY_NO_MAIN` |
+| `scripts/dev/generate-commands.py` | **Source of truth for parameters** — regenerates the three command files |
+| `src/commands/notify.yml` | Event-driven command (generated); maps parameters → `TELEGRAM_NOTIFY_*` env vars |
+| `src/commands/notify_failure.yml`, `notify_success.yml` | Thin wrappers over `notify` (generated) |
+| `src/scripts/notify.sh` | All logic: filters → status → CircleCI/Anthropic fetches → template sections → render → send. `tn_*` functions; `main` guarded by `TELEGRAM_NOTIFY_NO_MAIN` |
+| `scripts/ci/stub-circleci-api.sh`, `mock-telegram-server.py` | API doubles for integration tests (:8090/:8091 and :8089) |
+| `.claude/` | Project guide, edit/commit hooks, `orb-reviewer` agent, `live-test` / `orb-release` / `add-parameter` skills |
 | `src/scripts/record_failure.sh` | `on_fail` marker used by `event: always` |
 | `src/examples/*.yml` | Registry usage examples (`usage:` must be valid 2.1 config) |
 | `tests/notify.bats` | Unit suite; `tests/test_helper/mock_bin/curl` is the curl double |
@@ -32,8 +35,12 @@ success, or always. Bash + curl only.
 - Scripts stay failure-safe: exit 0 unless `TELEGRAM_NOTIFY_FAIL_ON_ERROR=true`.
 - Never log tokens. Escape anything interpolated into the message except
   `custom_message`/`mentions` (documented as trusted).
-- Every new parameter: add to all three command files, `notify.sh`, a bats
-  test, README parameter table, wiki Installation page, CHANGELOG.
+- Every new parameter: add to `scripts/dev/generate-commands.py` and run
+  `make generate-commands`; read it in `notify.sh`; add a bats test and the
+  env var to the helper's `unset` list; document in README, wiki, CHANGELOG.
+- Tests must assert: the helper re-enables `set -e` after sourcing the script
+  (which runs `set +e`); never remove that line.
+- Must keep working on bash 3.2 without jq/python3 (`make test-bash32`).
 - Versions (orbs, images, hooks, actions) are verified live, pinned, and
   bumped by Renovate — don't hand-edit to guessed versions.
 
@@ -43,6 +50,8 @@ success, or always. Bash + curl only.
 make lint          # shellcheck + yamllint + markdownlint + orb validate
 make test          # bats
 make coverage      # kcov (Docker on macOS)
+make test-bash32   # bash 3.2, no jq/python3 (Docker)
+make integration   # all templates vs mock/stub APIs
 make validate      # circleci orb pack + validate
 make publish-dev TAG=alpha
 ```

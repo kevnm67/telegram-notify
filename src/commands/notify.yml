@@ -2,8 +2,9 @@ description: >
   Send a Telegram message about the current job. Choose when it fires with
   `event`: `failure` (default, runs `when: on_fail`), `success` (`when:
   on_success`) or `always` (runs at the end of every job and reports the
-  job's real outcome). Failure messages include the failed step's output
-  fetched from the CircleCI API when `circle_token` is available.
+  job's real outcome). Pick a layout with `template` (basic, test_summary,
+  insights, ai_summary, deploy, custom). Failure messages include the failed
+  step's output fetched from the CircleCI API when `circle_token` is available.
 
 parameters:
   event:
@@ -15,69 +16,164 @@ parameters:
     type: string
     default: ""
     description: >
-      Telegram chat ID (user, group or channel, e.g. "-1001234567890"). Falls
-      back to the TELEGRAM_CHAT_ID environment variable when empty so the ID
-      can live in a context instead of the config.
+      Telegram chat ID (user, group or channel, e.g. "-1001234567890"). Falls back to the
+      TELEGRAM_CHAT_ID environment variable when empty so the ID can live in a context instead of
+      the config.
   bot_token:
     type: env_var_name
     default: TELEGRAM_BOT_TOKEN
-    description: Name of the environment variable holding the Telegram bot token.
+    description: >
+      Name of the environment variable holding the Telegram bot token.
   circle_token:
     type: env_var_name
     default: CIRCLE_TOKEN
     description: >
-      Name of the environment variable holding a CircleCI API token used to
-      fetch the failed step's output. Optional: without it the message still
-      sends, just without error output.
-  max_lines:
-    type: integer
-    default: 50
-    description: Maximum number of trailing output lines from the failed step to include.
-  include_links:
-    type: boolean
-    default: true
-    description: Append "View Build | View Workflow" links to the message.
+      Name of the environment variable holding a CircleCI API token. Optional, but enables error
+      output, job duration, test_summary and insights.
+  template:
+    type: enum
+    enum: [basic, test_summary, insights, ai_summary, deploy, custom]
+    default: basic
+    description: >
+      Message layout. basic: status + metadata (+ error output on failure). test_summary: adds
+      pass/fail/skip counts and failed test names from store_test_results. insights: adds workflow
+      success rate, p95 duration, MTTR and flaky-test count. ai_summary: on failure, adds a Claude-
+      generated summary, likely fix and a copy-paste prompt (needs anthropic_api_key). deploy:
+      release card for tagged builds. custom: render custom_body with {{VAR}} substitution.
+  custom_body:
+    type: string
+    default: ""
+    description: >
+      Body used by template: custom. Telegram HTML plus {{ENV_VAR}} placeholders (values are HTML-
+      escaped), e.g. "<b>{{CIRCLE_JOB}}</b> finished on {{CIRCLE_BRANCH}}".
   custom_message:
     type: string
     default: ""
     description: >
-      Extra text inserted under the headline. Telegram HTML is allowed
-      (<b>, <i>, <code>, <a href>); it is sent as-is, not escaped.
+      Extra line inserted under the headline. Telegram HTML is allowed and sent verbatim — only use
+      trusted values.
   mentions:
     type: string
     default: ""
-    description: Space-separated Telegram usernames to append (e.g. "@alice @bob").
+    description: >
+      Space-separated Telegram usernames appended to the message (e.g. "@alice @bob").
+  max_lines:
+    type: integer
+    default: 50
+    description: >
+      Trailing lines of the failed step's output to include.
+  attach_log:
+    type: boolean
+    default: false
+    description: >
+      On failure, also upload the failed step's full output as a .log document (reply to the
+      message).
+  buttons:
+    type: boolean
+    default: true
+    description: >
+      Render View build / Workflow / Pull request as inline keyboard buttons. When false, the links
+      are appended as text instead.
+  include_links:
+    type: boolean
+    default: true
+    description: >
+      Include build/workflow/PR links (as buttons or text).
+  include_duration:
+    type: boolean
+    default: true
+    description: >
+      Show the job duration (requires circle_token).
   thread_id:
     type: string
     default: ""
-    description: Forum topic (message_thread_id) to post into for group chats with topics enabled.
+    description: >
+      Forum topic (message_thread_id) to post into for group chats with topics enabled.
   silent:
     type: boolean
     default: false
-    description: Send without a notification sound (Telegram disable_notification).
+    description: >
+      Send without a notification sound (Telegram disable_notification).
+  branch_pattern:
+    type: string
+    default: ""
+    description: >
+      Comma-separated anchored regexes; only notify when the branch matches one (e.g.
+      "main,release/.*"). Ignored on tag builds.
+  tag_pattern:
+    type: string
+    default: ""
+    description: >
+      Comma-separated anchored regexes; only notify when the tag matches one (e.g.
+      "v[0-9]+\\.[0-9]+\\.[0-9]+").
+  invert_match:
+    type: boolean
+    default: false
+    description: >
+      Invert branch_pattern / tag_pattern: notify only when the ref does NOT match.
+  anthropic_api_key:
+    type: env_var_name
+    default: ANTHROPIC_API_KEY
+    description: >
+      Name of the environment variable holding an Anthropic API key (template: ai_summary).
+  ai_model:
+    type: string
+    default: claude-opus-5
+    description: >
+      Claude model used by template: ai_summary.
+  ai_max_tokens:
+    type: integer
+    default: 700
+    description: >
+      Maximum output tokens for the ai_summary request.
+  max_failed_tests:
+    type: integer
+    default: 5
+    description: >
+      How many failed tests to list in template: test_summary.
+  insights_window:
+    type: enum
+    enum: [last-24-hours, last-7-days, last-30-days, last-60-days, last-90-days]
+    default: last-30-days
+    description: >
+      Reporting window for template: insights.
+  workflow_name:
+    type: string
+    default: ""
+    description: >
+      Workflow name for template: insights. Resolved from CIRCLE_WORKFLOW_ID via the API when empty.
+  deploy_environment:
+    type: string
+    default: ""
+    description: >
+      Environment label shown by template: deploy (e.g. "production").
   dry_run:
     type: boolean
     default: false
-    description: Print the rendered message to the step output instead of calling Telegram.
+    description: >
+      Print the rendered message (and buttons) to the step output instead of calling Telegram.
   fail_on_error:
     type: boolean
     default: false
     description: >
-      Fail the step if the notification cannot be sent. Off by default so the
-      orb never masks the original job result.
+      Fail the step if the notification cannot be sent. Off by default so the orb never masks the
+      original job result.
   vcs_type:
     type: enum
     enum: [github, bitbucket]
     default: github
-    description: VCS provider used in the CircleCI v1.1 API path when fetching error output.
+    description: >
+      VCS provider used for CircleCI API paths and commit/branch links.
   api_base:
     type: string
-    default: https://api.telegram.org
-    description: Telegram Bot API base URL. Override to point at a proxy or a test double.
+    default: "https://api.telegram.org"
+    description: >
+      Telegram Bot API base URL. Override to point at a proxy or a test double.
   step_name:
     type: string
-    default: "Telegram notification"
-    description: Display name of the step in the CircleCI UI.
+    default: Telegram notification
+    description: >
+      Display name of the step in the CircleCI UI.
 
 steps:
   - when:
@@ -96,12 +192,27 @@ steps:
               TELEGRAM_NOTIFY_CHAT_ID: << parameters.chat_id >>
               TELEGRAM_NOTIFY_BOT_TOKEN_VAR: << parameters.bot_token >>
               TELEGRAM_NOTIFY_CIRCLE_TOKEN_VAR: << parameters.circle_token >>
-              TELEGRAM_NOTIFY_MAX_LINES: << parameters.max_lines >>
-              TELEGRAM_NOTIFY_INCLUDE_LINKS: << parameters.include_links >>
+              TELEGRAM_NOTIFY_TEMPLATE: << parameters.template >>
+              TELEGRAM_NOTIFY_CUSTOM_BODY: << parameters.custom_body >>
               TELEGRAM_NOTIFY_CUSTOM_MESSAGE: << parameters.custom_message >>
               TELEGRAM_NOTIFY_MENTIONS: << parameters.mentions >>
+              TELEGRAM_NOTIFY_MAX_LINES: << parameters.max_lines >>
+              TELEGRAM_NOTIFY_ATTACH_LOG: << parameters.attach_log >>
+              TELEGRAM_NOTIFY_BUTTONS: << parameters.buttons >>
+              TELEGRAM_NOTIFY_INCLUDE_LINKS: << parameters.include_links >>
+              TELEGRAM_NOTIFY_INCLUDE_DURATION: << parameters.include_duration >>
               TELEGRAM_NOTIFY_THREAD_ID: << parameters.thread_id >>
               TELEGRAM_NOTIFY_SILENT: << parameters.silent >>
+              TELEGRAM_NOTIFY_BRANCH_PATTERN: << parameters.branch_pattern >>
+              TELEGRAM_NOTIFY_TAG_PATTERN: << parameters.tag_pattern >>
+              TELEGRAM_NOTIFY_INVERT_MATCH: << parameters.invert_match >>
+              TELEGRAM_NOTIFY_ANTHROPIC_KEY_VAR: << parameters.anthropic_api_key >>
+              TELEGRAM_NOTIFY_AI_MODEL: << parameters.ai_model >>
+              TELEGRAM_NOTIFY_AI_MAX_TOKENS: << parameters.ai_max_tokens >>
+              TELEGRAM_NOTIFY_MAX_FAILED_TESTS: << parameters.max_failed_tests >>
+              TELEGRAM_NOTIFY_INSIGHTS_WINDOW: << parameters.insights_window >>
+              TELEGRAM_NOTIFY_WORKFLOW_NAME: << parameters.workflow_name >>
+              TELEGRAM_NOTIFY_DEPLOY_ENVIRONMENT: << parameters.deploy_environment >>
               TELEGRAM_NOTIFY_DRY_RUN: << parameters.dry_run >>
               TELEGRAM_NOTIFY_FAIL_ON_ERROR: << parameters.fail_on_error >>
               TELEGRAM_NOTIFY_VCS_TYPE: << parameters.vcs_type >>
@@ -119,12 +230,27 @@ steps:
               TELEGRAM_NOTIFY_CHAT_ID: << parameters.chat_id >>
               TELEGRAM_NOTIFY_BOT_TOKEN_VAR: << parameters.bot_token >>
               TELEGRAM_NOTIFY_CIRCLE_TOKEN_VAR: << parameters.circle_token >>
-              TELEGRAM_NOTIFY_MAX_LINES: << parameters.max_lines >>
-              TELEGRAM_NOTIFY_INCLUDE_LINKS: << parameters.include_links >>
+              TELEGRAM_NOTIFY_TEMPLATE: << parameters.template >>
+              TELEGRAM_NOTIFY_CUSTOM_BODY: << parameters.custom_body >>
               TELEGRAM_NOTIFY_CUSTOM_MESSAGE: << parameters.custom_message >>
               TELEGRAM_NOTIFY_MENTIONS: << parameters.mentions >>
+              TELEGRAM_NOTIFY_MAX_LINES: << parameters.max_lines >>
+              TELEGRAM_NOTIFY_ATTACH_LOG: << parameters.attach_log >>
+              TELEGRAM_NOTIFY_BUTTONS: << parameters.buttons >>
+              TELEGRAM_NOTIFY_INCLUDE_LINKS: << parameters.include_links >>
+              TELEGRAM_NOTIFY_INCLUDE_DURATION: << parameters.include_duration >>
               TELEGRAM_NOTIFY_THREAD_ID: << parameters.thread_id >>
               TELEGRAM_NOTIFY_SILENT: << parameters.silent >>
+              TELEGRAM_NOTIFY_BRANCH_PATTERN: << parameters.branch_pattern >>
+              TELEGRAM_NOTIFY_TAG_PATTERN: << parameters.tag_pattern >>
+              TELEGRAM_NOTIFY_INVERT_MATCH: << parameters.invert_match >>
+              TELEGRAM_NOTIFY_ANTHROPIC_KEY_VAR: << parameters.anthropic_api_key >>
+              TELEGRAM_NOTIFY_AI_MODEL: << parameters.ai_model >>
+              TELEGRAM_NOTIFY_AI_MAX_TOKENS: << parameters.ai_max_tokens >>
+              TELEGRAM_NOTIFY_MAX_FAILED_TESTS: << parameters.max_failed_tests >>
+              TELEGRAM_NOTIFY_INSIGHTS_WINDOW: << parameters.insights_window >>
+              TELEGRAM_NOTIFY_WORKFLOW_NAME: << parameters.workflow_name >>
+              TELEGRAM_NOTIFY_DEPLOY_ENVIRONMENT: << parameters.deploy_environment >>
               TELEGRAM_NOTIFY_DRY_RUN: << parameters.dry_run >>
               TELEGRAM_NOTIFY_FAIL_ON_ERROR: << parameters.fail_on_error >>
               TELEGRAM_NOTIFY_VCS_TYPE: << parameters.vcs_type >>
@@ -142,12 +268,27 @@ steps:
               TELEGRAM_NOTIFY_CHAT_ID: << parameters.chat_id >>
               TELEGRAM_NOTIFY_BOT_TOKEN_VAR: << parameters.bot_token >>
               TELEGRAM_NOTIFY_CIRCLE_TOKEN_VAR: << parameters.circle_token >>
-              TELEGRAM_NOTIFY_MAX_LINES: << parameters.max_lines >>
-              TELEGRAM_NOTIFY_INCLUDE_LINKS: << parameters.include_links >>
+              TELEGRAM_NOTIFY_TEMPLATE: << parameters.template >>
+              TELEGRAM_NOTIFY_CUSTOM_BODY: << parameters.custom_body >>
               TELEGRAM_NOTIFY_CUSTOM_MESSAGE: << parameters.custom_message >>
               TELEGRAM_NOTIFY_MENTIONS: << parameters.mentions >>
+              TELEGRAM_NOTIFY_MAX_LINES: << parameters.max_lines >>
+              TELEGRAM_NOTIFY_ATTACH_LOG: << parameters.attach_log >>
+              TELEGRAM_NOTIFY_BUTTONS: << parameters.buttons >>
+              TELEGRAM_NOTIFY_INCLUDE_LINKS: << parameters.include_links >>
+              TELEGRAM_NOTIFY_INCLUDE_DURATION: << parameters.include_duration >>
               TELEGRAM_NOTIFY_THREAD_ID: << parameters.thread_id >>
               TELEGRAM_NOTIFY_SILENT: << parameters.silent >>
+              TELEGRAM_NOTIFY_BRANCH_PATTERN: << parameters.branch_pattern >>
+              TELEGRAM_NOTIFY_TAG_PATTERN: << parameters.tag_pattern >>
+              TELEGRAM_NOTIFY_INVERT_MATCH: << parameters.invert_match >>
+              TELEGRAM_NOTIFY_ANTHROPIC_KEY_VAR: << parameters.anthropic_api_key >>
+              TELEGRAM_NOTIFY_AI_MODEL: << parameters.ai_model >>
+              TELEGRAM_NOTIFY_AI_MAX_TOKENS: << parameters.ai_max_tokens >>
+              TELEGRAM_NOTIFY_MAX_FAILED_TESTS: << parameters.max_failed_tests >>
+              TELEGRAM_NOTIFY_INSIGHTS_WINDOW: << parameters.insights_window >>
+              TELEGRAM_NOTIFY_WORKFLOW_NAME: << parameters.workflow_name >>
+              TELEGRAM_NOTIFY_DEPLOY_ENVIRONMENT: << parameters.deploy_environment >>
               TELEGRAM_NOTIFY_DRY_RUN: << parameters.dry_run >>
               TELEGRAM_NOTIFY_FAIL_ON_ERROR: << parameters.fail_on_error >>
               TELEGRAM_NOTIFY_VCS_TYPE: << parameters.vcs_type >>

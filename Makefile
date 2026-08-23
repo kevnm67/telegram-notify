@@ -10,7 +10,7 @@ DIAGRAM_SRCS := $(wildcard docs/architecture/*.d2)
 DIAGRAM_SVGS := $(DIAGRAM_SRCS:.d2=.svg)
 DIAGRAM_PNGS := $(DIAGRAM_SRCS:.d2=.png)
 
-.PHONY: help setup lint test coverage build validate review pack publish-dev diagrams verify-diagrams wiki-sync clean
+.PHONY: help setup lint test test-bash32 integration coverage build validate review pack publish-dev generate-commands diagrams verify-diagrams wiki-sync clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -31,6 +31,16 @@ lint: ## shellcheck + yamllint + markdownlint + orb validate
 
 test: ## Run the bats unit suite
 	./scripts/ci/run-unit-tests.sh
+
+test-bash32: ## Run the bats suite on bash 3.2 without jq/python3 (Docker)
+	docker run --rm --platform linux/amd64 -v "$(CURDIR)":/repo -w /repo bash:3.2 \
+		bash -c './scripts/ci/install-test-tools.sh --minimal >/dev/null && ./scripts/ci/run-unit-tests.sh'
+
+integration: ## Run every template against the mock Telegram + stubbed CircleCI/Anthropic APIs
+	./scripts/ci/run-integration-locally.sh
+
+generate-commands: ## Regenerate src/commands/*.yml from scripts/dev/generate-commands.py
+	python3 scripts/dev/generate-commands.py
 
 coverage: ## Run unit tests under kcov (Linux); on macOS runs inside Docker
 ifeq ($(shell uname -s),Linux)

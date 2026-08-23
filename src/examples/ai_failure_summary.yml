@@ -1,0 +1,25 @@
+description: >
+  On failure, ask Claude for a two-sentence root-cause summary, a likely fix
+  and a copy-paste prompt for your AI coding assistant. Needs
+  ANTHROPIC_API_KEY in the context (cost: one small request per failure).
+usage:
+  version: 2.1
+  orbs:
+    telegram-notify: kevnm67/telegram-notify@1.0.0
+  jobs:
+    build:
+      docker:
+        - image: cimg/base:current
+      steps:
+        - checkout
+        - run: make build
+        - telegram-notify/notify_failure:
+            template: ai_summary
+            ai_model: claude-opus-5
+            attach_log: true
+            mentions: "@oncall"
+  workflows:
+    ci:
+      jobs:
+        - build:
+            context: telegram

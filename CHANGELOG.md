@@ -6,6 +6,43 @@ All notable changes to this orb are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Templates: `test_summary` (pass/fail/skip counts, runtime, failed test names
+  from the CircleCI tests API), `insights` (workflow success rate, p95
+  duration, MTTR, throughput, flaky-test count), `ai_summary` (Claude root
+  cause, likely fix and copy-paste prompt), `deploy` (release card) and
+  `custom` (`custom_body` with `{{ENV_VAR}}` substitution).
+- Inline keyboard buttons (`buttons`) for View build / Workflow / Pull request;
+  repository, branch/tag, job and PR are hyperlinked; `⏱ Duration` from the v2
+  job endpoint (`include_duration`).
+- `attach_log` uploads the failed step's full output as a document.
+- `branch_pattern`, `tag_pattern`, `invert_match` filters.
+- Parameters `anthropic_api_key`, `ai_model`, `ai_max_tokens`,
+  `max_failed_tests`, `insights_window`, `workflow_name`, `deploy_environment`.
+- bash 3.2 / no-jq / no-python3 compatibility job (`unit_tests_bash32`) and
+  grep/sed/awk fallbacks for every JSON read.
+- Integration job `integration_test_templates` against stubbed CircleCI and
+  Anthropic APIs; live dogfood jobs for every template.
+- Project Claude assets: `.claude/CLAUDE.md`, hooks (post-edit checks,
+  commit gate), `orb-reviewer` agent, `live-test`, `orb-release` and
+  `add-parameter` skills; `scripts/dev/generate-commands.py` keeps the three
+  command files in sync.
+
+
+- `notify` command with `event: failure | success | always`.
+- `notify_success` command.
+- Parameters: `bot_token`, `circle_token`, `custom_message`, `mentions`,
+  `thread_id`, `silent`, `dry_run`, `fail_on_error`, `vcs_type`, `api_base`,
+  `step_name`; `chat_id` falls back to `TELEGRAM_CHAT_ID`.
+- `👤 Triggered by` line (from `CIRCLE_USERNAME`).
+- bats unit suite (40 tests) with kcov coverage published to qlty.
+- Four integration jobs exercising the packed orb against a local Telegram
+  API double.
+- Renovate grouping, pre-commit hooks, Makefile, d2 architecture diagram,
+  wiki, GitHub caller workflows (Claude review/fix, labeler, merge-on-green,
+  PR summary, label sync, wiki sync, repo audit).
+
 ### Changed
 
 - **Renamed** from `ci-failure-notifier` to `telegram-notify`
@@ -22,20 +59,13 @@ All notable changes to this orb are documented here. The format follows
   setup → `test-deploy` continuation, dev publish on `main`, production
   publish on `vX.Y.Z` tags.
 
-### Added
+### Fixed
 
-- `notify` command with `event: failure | success | always`.
-- `notify_success` command.
-- Parameters: `bot_token`, `circle_token`, `custom_message`, `mentions`,
-  `thread_id`, `silent`, `dry_run`, `fail_on_error`, `vcs_type`, `api_base`,
-  `step_name`; `chat_id` falls back to `TELEGRAM_CHAT_ID`.
-- `👤 Triggered by` line (from `CIRCLE_USERNAME`).
-- bats unit suite (40 tests) with kcov coverage published to qlty.
-- Four integration jobs exercising the packed orb against a local Telegram
-  API double.
-- Renovate grouping, pre-commit hooks, Makefile, d2 architecture diagram,
-  wiki, GitHub caller workflows (Claude review/fix, labeler, merge-on-green,
-  PR summary, label sync, wiki sync, repo audit).
+- The bats helper now restores `errexit` after sourcing `notify.sh` — previously
+  every bare `[[ ]]` assertion in the suite was silently vacuous.
+- `tn_extract_messages` no longer inserts blank lines between step messages.
+- Escaped-slash normalisation and failed-action selection work on bash 3.2
+  without jq.
 
 ## [0.1.0] - 2026-02-21
 

@@ -1,0 +1,29 @@
+description: >
+  Announce tagged releases with the deploy template and only notify about
+  failures on main and release branches.
+usage:
+  version: 2.1
+  orbs:
+    telegram-notify: kevnm67/telegram-notify@1.0.0
+  jobs:
+    deploy:
+      docker:
+        - image: cimg/base:current
+      steps:
+        - checkout
+        - run: ./deploy.sh production
+        - telegram-notify/notify_success:
+            template: deploy
+            deploy_environment: production
+            tag_pattern: "v[0-9]+\\.[0-9]+\\.[0-9]+"
+        - telegram-notify/notify_failure:
+            branch_pattern: "main,release/.*"
+            mentions: "@release-captain"
+  workflows:
+    release:
+      jobs:
+        - deploy:
+            context: telegram
+            filters:
+              tags:
+                only: /^v.*/

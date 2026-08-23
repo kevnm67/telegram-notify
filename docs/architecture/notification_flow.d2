@@ -19,36 +19,46 @@ developer: Developer / Renovate {
 
 circleci: CircleCI job {
   class: node
-  style.font-size: 24
   icon: https://icons.terrastruct.com/aws%2FManagement%20%26%20Governance%2FAWS-Management-Console_light-bg.svg
   shape: image
 }
 
 orb: telegram-notify orb {
   class: node
-  style.font-size: 24
   style.fill: "#EAF2FB"
 
-  cmd: "notify / notify_failure / notify_success" {
+  cmd: "notify / notify_failure / notify_success\n(event + template + filters)" {
     class: node
     shape: rectangle
   }
-  script: "notify.sh\n(when: on_fail | on_success | always)" {
+  script: "notify.sh\nbranch/tag filter → status → fetch → render → send" {
     class: node
     shape: rectangle
   }
-  marker: "record_failure.sh\n(marker file for event: always)" {
+  templates: "templates\nbasic · test_summary · insights\nai_summary · deploy · custom" {
     class: node
     shape: rectangle
     style.stroke-dash: 3
   }
-  cmd -> script: "params → TELEGRAM_NOTIFY_* env" {class: edge}
+  marker: "record_failure.sh\n(marker for event: always)" {
+    class: node
+    shape: rectangle
+    style.stroke-dash: 3
+  }
+  cmd -> script: "TELEGRAM_NOTIFY_* env" {class: edge}
   marker -> script: "job failed?" {class: edge}
+  templates -> script: "sections" {class: edge}
 }
 
-cci_api: CircleCI API v1.1 {
+cci_api: "CircleCI API\nv1.1 step output · v2 job / tests · Insights" {
   class: node
   icon: https://icons.terrastruct.com/aws%2F_General%2FTraditional-server_light-bg.svg
+  shape: image
+}
+
+anthropic: "Anthropic Messages API\n(template: ai_summary)" {
+  class: node
+  icon: https://icons.terrastruct.com/aws%2FApplication%20Integration%2FAmazon-Simple-Notification-Service-SNS_Topic_light-bg.svg
   shape: image
 }
 
@@ -64,8 +74,9 @@ chat: Telegram chat / topic {
   shape: image
 }
 
-developer -> circleci: "push / PR" {class: edge}
-circleci -> orb.cmd: "step (or post-step)" {class: edge}
-orb.script -> cci_api: "GET build → failed step output\n(CIRCLE_TOKEN, optional)" {class: edge}
-orb.script -> telegram: "POST sendMessage\n(HTML, url-encoded form)" {class: edge}
-telegram -> chat: "🔴 failure / ✅ success" {class: edge}
+developer -> circleci: "push / PR / tag" {class: edge}
+circleci -> orb.cmd: "step or post-step" {class: edge}
+orb.script -> cci_api: "GET failed output, duration,\ntest results, insights (CIRCLE_TOKEN)" {class: edge}
+orb.script -> anthropic: "POST summary + fix + prompt\n(ANTHROPIC_API_KEY, opt-in)" {class: edge}
+orb.script -> telegram: "sendMessage (HTML, inline buttons)\nsendDocument (attach_log)" {class: edge}
+telegram -> chat: "🔴 failure / ✅ success / 🚀 release" {class: edge}

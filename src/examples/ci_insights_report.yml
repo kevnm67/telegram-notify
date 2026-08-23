@@ -1,0 +1,29 @@
+description: >
+  Attach workflow health metrics (success rate, p95 duration, MTTR,
+  throughput, flaky tests) from CircleCI Insights to a nightly message.
+usage:
+  version: 2.1
+  orbs:
+    telegram-notify: kevnm67/telegram-notify@1.0.0
+  jobs:
+    nightly_report:
+      docker:
+        - image: cimg/base:current
+      steps:
+        - telegram-notify/notify_success:
+            template: insights
+            workflow_name: ci
+            insights_window: last-7-days
+            custom_message: "<b>Weekly CI health</b>"
+            silent: true
+  workflows:
+    weekly:
+      triggers:
+        - schedule:
+            cron: "0 8 * * 1"
+            filters:
+              branches:
+                only: main
+      jobs:
+        - nightly_report:
+            context: telegram
