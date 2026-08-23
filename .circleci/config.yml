@@ -52,6 +52,23 @@ jobs:
           files: coverage/bats/cobertura.xml
           add_prefix: src/scripts
 
+  unit_tests_bash32:
+    # macOS executors ship bash 3.2; this Alpine image also lacks jq and python3,
+    # so it exercises every grep/sed/awk fallback path.
+    docker:
+      - image: bash:3.2
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Install git, curl and bats
+          command: ./scripts/ci/install-test-tools.sh --minimal
+      - run:
+          name: Unit tests on bash 3.2 (no jq, no python3)
+          command: timeout 600 ./scripts/ci/run-unit-tests.sh --junit-dir test-results
+      - store_test_results:
+          path: test-results
+
   live_success:
     docker:
       - image: cimg/base:current
@@ -79,6 +96,63 @@ jobs:
           custom_message: "<i>live test: notify_failure via @dev:alpha (expected red job)</i>"
           max_lines: 10
           mentions: "@kevnm67"
+          attach_log: true
+
+  live_ai_summary:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Fail on purpose
+          command: ./scripts/ci/fail-on-purpose.sh
+      - telegram-notify/notify_failure:
+          template: ai_summary
+          custom_message: "<i>live test: template ai_summary (expected red job)</i>"
+          max_lines: 10
+
+  live_test_summary:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Produce JUnit results with one failure
+          command: ./scripts/ci/write-sample-junit.sh test-results
+      - store_test_results:
+          path: test-results
+      - telegram-notify/notify:
+          event: always
+          template: test_summary
+          custom_message: "<i>live test: template test_summary</i>"
+
+  live_insights:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - checkout
+      - telegram-notify/notify_success:
+          template: insights
+          insights_window: last-30-days
+          custom_message: "<i>live test: template insights</i>"
+          silent: true
+
+  live_custom:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - checkout
+      - telegram-notify/notify_success:
+          template: custom
+          custom_body: >-
+            🧪 <b>{{CIRCLE_JOB}}</b> finished on <code>{{CIRCLE_BRANCH}}</code>
+            by {{CIRCLE_USERNAME}} — <i>live test: template custom</i>
+          buttons: false
+          silent: true
 
 workflows:
   live_test:
@@ -87,6 +161,14 @@ workflows:
       - live_success:
           context: ci_notify
       - live_failure:
+          context: ci_notify
+      - live_ai_summary:
+          context: ci_notify
+      - live_test_summary:
+          context: ci_notify
+      - live_insights:
+          context: ci_notify
+      - live_custom:
           context: ci_notify
       - live_success:
           name: live_always_post_step
@@ -115,6 +197,8 @@ workflows:
       - unit_tests:
           context: qlty-credentials
           filters: *filters
+      - unit_tests_bash32:
+          filters: *filters
       - orb-tools/continue:
           pipeline_number: << pipeline.number >>
           vcs_type: << pipeline.project.type >>
@@ -125,4 +209,5 @@ workflows:
             - orb-tools/review
             - shellcheck/check
             - unit_tests
+            - unit_tests_bash32
           filters: *filters

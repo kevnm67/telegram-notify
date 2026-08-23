@@ -1,66 +1,171 @@
 description: >
-  Send a Telegram message when the job fails (runs `when: on_fail`). Includes
-  the failed step's output when `circle_token` is available. Shorthand for
-  `notify` with `event: failure`.
+  Send a Telegram message when the job fails (runs `when: on_fail`). Includes the
+  failed step's output when `circle_token` is available. Shorthand for `notify`
+  with `event: failure`; accepts the same parameters.
 
 parameters:
   chat_id:
     type: string
     default: ""
-    description: Telegram chat ID. Falls back to the TELEGRAM_CHAT_ID environment variable when empty.
+    description: >
+      Telegram chat ID (user, group or channel, e.g. "-1001234567890"). Falls back to the
+      TELEGRAM_CHAT_ID environment variable when empty so the ID can live in a context instead of
+      the config.
   bot_token:
     type: env_var_name
     default: TELEGRAM_BOT_TOKEN
-    description: Name of the environment variable holding the Telegram bot token.
+    description: >
+      Name of the environment variable holding the Telegram bot token.
   circle_token:
     type: env_var_name
     default: CIRCLE_TOKEN
-    description: Name of the environment variable holding a CircleCI API token (optional, enables error output).
-  max_lines:
-    type: integer
-    default: 50
-    description: Maximum number of trailing output lines from the failed step to include.
-  include_links:
-    type: boolean
-    default: true
-    description: Append "View Build | View Workflow" links to the message.
+    description: >
+      Name of the environment variable holding a CircleCI API token. Optional, but enables error
+      output, job duration, test_summary and insights.
+  template:
+    type: enum
+    enum: [basic, test_summary, insights, ai_summary, deploy, custom]
+    default: basic
+    description: >
+      Message layout. basic: status + metadata (+ error output on failure). test_summary: adds
+      pass/fail/skip counts and failed test names from store_test_results. insights: adds workflow
+      success rate, p95 duration, MTTR and flaky-test count. ai_summary: on failure, adds a Claude-
+      generated summary, likely fix and a copy-paste prompt (needs anthropic_api_key). deploy:
+      release card for tagged builds. custom: render custom_body with {{VAR}} substitution.
+  custom_body:
+    type: string
+    default: ""
+    description: >
+      Body used by template: custom. Telegram HTML plus {{ENV_VAR}} placeholders (values are HTML-
+      escaped), e.g. "<b>{{CIRCLE_JOB}}</b> finished on {{CIRCLE_BRANCH}}".
   custom_message:
     type: string
     default: ""
-    description: Extra text (Telegram HTML allowed) inserted under the headline.
+    description: >
+      Extra line inserted under the headline. Telegram HTML is allowed and sent verbatim — only use
+      trusted values.
   mentions:
     type: string
     default: ""
-    description: Space-separated Telegram usernames to append (e.g. "@alice @bob").
+    description: >
+      Space-separated Telegram usernames appended to the message (e.g. "@alice @bob").
+  max_lines:
+    type: integer
+    default: 50
+    description: >
+      Trailing lines of the failed step's output to include.
+  attach_log:
+    type: boolean
+    default: false
+    description: >
+      On failure, also upload the failed step's full output as a .log document (reply to the
+      message).
+  buttons:
+    type: boolean
+    default: true
+    description: >
+      Render View build / Workflow / Pull request as inline keyboard buttons. When false, the links
+      are appended as text instead.
+  include_links:
+    type: boolean
+    default: true
+    description: >
+      Include build/workflow/PR links (as buttons or text).
+  include_duration:
+    type: boolean
+    default: true
+    description: >
+      Show the job duration (requires circle_token).
   thread_id:
     type: string
     default: ""
-    description: Forum topic (message_thread_id) to post into.
+    description: >
+      Forum topic (message_thread_id) to post into for group chats with topics enabled.
   silent:
     type: boolean
     default: false
-    description: Send without a notification sound.
+    description: >
+      Send without a notification sound (Telegram disable_notification).
+  branch_pattern:
+    type: string
+    default: ""
+    description: >
+      Comma-separated anchored regexes; only notify when the branch matches one (e.g.
+      "main,release/.*"). Ignored on tag builds.
+  tag_pattern:
+    type: string
+    default: ""
+    description: >
+      Comma-separated anchored regexes; only notify when the tag matches one (e.g.
+      "v[0-9]+\\.[0-9]+\\.[0-9]+").
+  invert_match:
+    type: boolean
+    default: false
+    description: >
+      Invert branch_pattern / tag_pattern: notify only when the ref does NOT match.
+  anthropic_api_key:
+    type: env_var_name
+    default: ANTHROPIC_API_KEY
+    description: >
+      Name of the environment variable holding an Anthropic API key (template: ai_summary).
+  ai_model:
+    type: string
+    default: claude-opus-5
+    description: >
+      Claude model used by template: ai_summary.
+  ai_max_tokens:
+    type: integer
+    default: 700
+    description: >
+      Maximum output tokens for the ai_summary request.
+  max_failed_tests:
+    type: integer
+    default: 5
+    description: >
+      How many failed tests to list in template: test_summary.
+  insights_window:
+    type: enum
+    enum: [last-24-hours, last-7-days, last-30-days, last-60-days, last-90-days]
+    default: last-30-days
+    description: >
+      Reporting window for template: insights.
+  workflow_name:
+    type: string
+    default: ""
+    description: >
+      Workflow name for template: insights. Resolved from CIRCLE_WORKFLOW_ID via the API when empty.
+  deploy_environment:
+    type: string
+    default: ""
+    description: >
+      Environment label shown by template: deploy (e.g. "production").
   dry_run:
     type: boolean
     default: false
-    description: Print the rendered message instead of calling Telegram.
+    description: >
+      Print the rendered message (and buttons) to the step output instead of calling Telegram.
   fail_on_error:
     type: boolean
     default: false
-    description: Fail the step if the notification cannot be sent.
+    description: >
+      Fail the step if the notification cannot be sent. Off by default so the orb never masks the
+      original job result.
   vcs_type:
     type: enum
     enum: [github, bitbucket]
     default: github
-    description: VCS provider used in the CircleCI v1.1 API path.
+    description: >
+      VCS provider used for CircleCI API paths and commit/branch links.
   api_base:
     type: string
-    default: https://api.telegram.org
-    description: Telegram Bot API base URL (override for proxies or tests).
+    default: "https://api.telegram.org"
+    description: >
+      Telegram Bot API base URL. Override to point at a proxy or a test double.
   step_name:
     type: string
-    default: "Telegram notification"
-    description: Display name of the step in the CircleCI UI.
+    default: Telegram notification
+    description: >
+      Display name of the step in the CircleCI UI.
 
 steps:
   - notify:
@@ -68,12 +173,27 @@ steps:
       chat_id: << parameters.chat_id >>
       bot_token: << parameters.bot_token >>
       circle_token: << parameters.circle_token >>
-      max_lines: << parameters.max_lines >>
-      include_links: << parameters.include_links >>
+      template: << parameters.template >>
+      custom_body: << parameters.custom_body >>
       custom_message: << parameters.custom_message >>
       mentions: << parameters.mentions >>
+      max_lines: << parameters.max_lines >>
+      attach_log: << parameters.attach_log >>
+      buttons: << parameters.buttons >>
+      include_links: << parameters.include_links >>
+      include_duration: << parameters.include_duration >>
       thread_id: << parameters.thread_id >>
       silent: << parameters.silent >>
+      branch_pattern: << parameters.branch_pattern >>
+      tag_pattern: << parameters.tag_pattern >>
+      invert_match: << parameters.invert_match >>
+      anthropic_api_key: << parameters.anthropic_api_key >>
+      ai_model: << parameters.ai_model >>
+      ai_max_tokens: << parameters.ai_max_tokens >>
+      max_failed_tests: << parameters.max_failed_tests >>
+      insights_window: << parameters.insights_window >>
+      workflow_name: << parameters.workflow_name >>
+      deploy_environment: << parameters.deploy_environment >>
       dry_run: << parameters.dry_run >>
       fail_on_error: << parameters.fail_on_error >>
       vcs_type: << parameters.vcs_type >>

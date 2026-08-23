@@ -19,11 +19,25 @@ PORT = int(os.environ.get("MOCK_TELEGRAM_PORT", "8089"))
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):  # noqa: N802 - http.server API
         length = int(self.headers.get("Content-Length", "0"))
-        body = self.rfile.read(length).decode("utf-8")
-        if not (self.path.startswith("/bot") and self.path.endswith("/sendMessage")):
+        body = self.rfile.read(length).decode("utf-8", errors="replace")
+        method = self.path.rsplit("/", 1)[-1]
+        if not (
+            self.path.startswith("/bot") and method in ("sendMessage", "sendDocument")
+        ):
             self._reply(404, {"ok": False, "description": "Not Found"})
             return
-        fields = {k: v[0] for k, v in parse_qs(body, keep_blank_values=True).items()}
+        if method == "sendDocument":
+            # multipart upload: record the method and the filename only
+            fname = ""
+            for line in body.splitlines():
+                if "filename=" in line:
+                    fname = line.split("filename=")[-1].strip().strip('"')
+            fields = {"method": "sendDocument", "filename": fname, "bytes": len(body)}
+        else:
+            fields = {
+                k: v[0] for k, v in parse_qs(body, keep_blank_values=True).items()
+            }
+            fields["method"] = "sendMessage"
         with open(LOG_PATH, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(fields) + "\n")
         self._reply(200, {"ok": True, "result": {"message_id": 1}})

@@ -1,0 +1,26 @@
+description: >
+  Fully custom message body with {{ENV_VAR}} placeholders (values are
+  HTML-escaped) — use any CircleCI built-in or your own exported variables.
+usage:
+  version: 2.1
+  orbs:
+    telegram-notify: kevnm67/telegram-notify@1.0.0
+  jobs:
+    smoke:
+      docker:
+        - image: cimg/base:current
+      steps:
+        - checkout
+        - run: ./smoke.sh
+        - telegram-notify/notify:
+            event: always
+            template: custom
+            custom_body: >-
+              🧪 <b>{{CIRCLE_JOB}}</b> on <code>{{CIRCLE_BRANCH}}</code>
+              by {{CIRCLE_USERNAME}} — build #{{CIRCLE_BUILD_NUM}}
+            buttons: true
+  workflows:
+    ci:
+      jobs:
+        - smoke:
+            context: telegram

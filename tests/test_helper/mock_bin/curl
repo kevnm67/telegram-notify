@@ -20,14 +20,50 @@ if [[ "${MOCK_CURL_EXIT:-0}" != "0" ]]; then
     exit "${MOCK_CURL_EXIT}"
 fi
 
-case "$url" in
-*/sendMessage)
+# Default payloads (set here because ${var:-{...}} cannot hold unescaped braces).
+[[ -n "${MOCK_TELEGRAM_BODY:-}" ]] || MOCK_TELEGRAM_BODY='{"ok":true,"result":{"message_id":4242}}'
+[[ -n "${MOCK_TELEGRAM_DOC_BODY:-}" ]] || MOCK_TELEGRAM_DOC_BODY='{"ok":true,"result":{"message_id":4243}}'
+[[ -n "${MOCK_ANTHROPIC_BODY:-}" ]] || MOCK_ANTHROPIC_BODY='{"content":[{"type":"text","text":"SUMMARY: mock summary\nFIX: mock fix\nPROMPT: mock prompt"}]}'
+[[ -n "${MOCK_TESTS_JSON:-}" ]] || MOCK_TESTS_JSON='{"items":[]}'
+[[ -n "${MOCK_JOB_JSON:-}" ]] || MOCK_JOB_JSON='{"duration":133000}'
+[[ -n "${MOCK_WORKFLOW_JSON:-}" ]] || MOCK_WORKFLOW_JSON='{"name":"build_and_test"}'
+[[ -n "${MOCK_FLAKY_JSON:-}" ]] || MOCK_FLAKY_JSON='{"total_flaky_tests":2}'
+
+reply() { # $1 body, $2 http code
     if [[ -n "$out_file" ]]; then
-        printf '%s' "${MOCK_TELEGRAM_BODY:-{\"ok\":true\}}" >"$out_file"
+        printf '%s' "$1" >"$out_file"
+    else
+        printf '%s' "$1"
     fi
     if [[ "$want_code" == true ]]; then
-        printf '%s' "${MOCK_HTTP_CODE:-200}"
+        printf '%s' "$2"
     fi
+}
+
+case "$url" in
+*/sendMessage)
+    reply "$MOCK_TELEGRAM_BODY" "${MOCK_HTTP_CODE:-200}"
+    ;;
+*/sendDocument)
+    reply "$MOCK_TELEGRAM_DOC_BODY" "${MOCK_DOC_HTTP_CODE:-200}"
+    ;;
+*/v1/messages)
+    reply "$MOCK_ANTHROPIC_BODY" "${MOCK_ANTHROPIC_HTTP_CODE:-200}"
+    ;;
+*/api/v2/*/tests)
+    printf '%s' "$MOCK_TESTS_JSON"
+    ;;
+*/api/v2/*/job/*)
+    printf '%s' "$MOCK_JOB_JSON"
+    ;;
+*/api/v2/workflow/*)
+    printf '%s' "$MOCK_WORKFLOW_JSON"
+    ;;
+*/api/v2/insights/*/flaky-tests*)
+    printf '%s' "$MOCK_FLAKY_JSON"
+    ;;
+*/api/v2/insights/*/summary*)
+    printf '%s' "${MOCK_INSIGHTS_JSON:-}"
     ;;
 */api/v1.1/*)
     printf '%s' "${MOCK_CIRCLE_BUILD_JSON:-}"

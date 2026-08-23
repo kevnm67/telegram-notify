@@ -27,27 +27,35 @@ common_setup() {
         TELEGRAM_NOTIFY_DRY_RUN TELEGRAM_NOTIFY_FAIL_ON_ERROR TELEGRAM_NOTIFY_INCLUDE_LINKS \
         TELEGRAM_NOTIFY_VCS_TYPE TELEGRAM_NOTIFY_CIRCLECI_API_BASE TELEGRAM_NOTIFY_API_BASE \
         TELEGRAM_NOTIFY_BOT_TOKEN_VAR TELEGRAM_NOTIFY_MAX_LINES \
-        MOCK_HTTP_CODE MOCK_TELEGRAM_BODY MOCK_CURL_EXIT MOCK_CIRCLE_BUILD_JSON MOCK_STEP_OUTPUT
-    rm -f "${TMPDIR}/telegram_notify_job_failed"
+        TELEGRAM_NOTIFY_TEMPLATE TELEGRAM_NOTIFY_BUTTONS TELEGRAM_NOTIFY_INCLUDE_DURATION \
+        TELEGRAM_NOTIFY_BRANCH_PATTERN TELEGRAM_NOTIFY_TAG_PATTERN TELEGRAM_NOTIFY_INVERT_MATCH \
+        TELEGRAM_NOTIFY_ATTACH_LOG TELEGRAM_NOTIFY_CUSTOM_BODY TELEGRAM_NOTIFY_AI_MODEL \
+        TELEGRAM_NOTIFY_INSIGHTS_WINDOW TELEGRAM_NOTIFY_WORKFLOW_NAME TELEGRAM_NOTIFY_MAX_FAILED_TESTS \
+        ANTHROPIC_API_KEY CIRCLE_TAG CIRCLE_PULL_REQUEST CIRCLE_PR_NUMBER CIRCLE_REPOSITORY_URL \
+        MOCK_HTTP_CODE MOCK_TELEGRAM_BODY MOCK_CURL_EXIT MOCK_CIRCLE_BUILD_JSON MOCK_STEP_OUTPUT \
+        MOCK_TESTS_JSON MOCK_JOB_JSON MOCK_WORKFLOW_JSON MOCK_FLAKY_JSON MOCK_INSIGHTS_JSON \
+        MOCK_ANTHROPIC_BODY MOCK_ANTHROPIC_HTTP_CODE MOCK_TELEGRAM_DOC_BODY MOCK_DOC_HTTP_CODE
+    rm -f "${TMPDIR}/telegram_notify_job_failed" "${TMPDIR}/telegram_notify_failed_step.log"
 
     export TELEGRAM_NOTIFY_NO_MAIN=1
     # shellcheck source=../../src/scripts/notify.sh
     # shellcheck disable=SC1091
     source "${REPO_ROOT}/src/scripts/notify.sh"
+    # notify.sh runs `set +e` for its failure-safe contract; bats relies on
+    # errexit to detect failed assertions, so restore it after sourcing.
+    set -eE
 }
 
 # Extract the "text=" form field of the last sendMessage call from the mock log.
 last_sent_text() {
-    python3 - "$MOCK_CURL_LOG" <<'PY'
-import sys
-log = open(sys.argv[1], encoding="utf-8").read()
-start = log.rfind("--data-urlencode text=")
-if start < 0:
-    sys.exit(0)
-start += len("--data-urlencode text=")
-end = log.find(" --data-urlencode parse_mode=HTML", start)
-print(log[start:end if end >= 0 else None], end="")
-PY
+    awk 'BEGIN { RS = "--data-urlencode text=" }
+         NR > 1 { i = index($0, " --data-urlencode parse_mode=HTML"); last = (i ? substr($0, 1, i - 1) : $0) }
+         END { printf "%s", last }' "$MOCK_CURL_LOG"
+}
+
+# Skip a test when neither jq nor python3 is available (feature needs one of them).
+require_json_tool() {
+    command -v jq >/dev/null 2>&1 || command -v python3 >/dev/null 2>&1 || skip "needs jq or python3"
 }
 
 run_script() {
