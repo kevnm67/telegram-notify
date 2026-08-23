@@ -29,7 +29,6 @@ All notable changes to this orb are documented here. The format follows
   `add-parameter` skills; `scripts/dev/generate-commands.py` keeps the three
   command files in sync.
 
-
 - `notify` command with `event: failure | success | always`.
 - `notify_success` command.
 - Parameters: `bot_token`, `circle_token`, `custom_message`, `mentions`,
