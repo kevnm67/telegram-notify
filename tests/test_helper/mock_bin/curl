@@ -3,6 +3,9 @@
 # answers from MOCK_* variables so the orb script can be exercised offline.
 set -euo pipefail
 printf '%s\n' "$*" >>"${MOCK_CURL_LOG:?}"
+for a in "$@"; do
+    case "$a" in @/*) printf 'body: %s\n' "$(cat "${a#@}")" >>"${MOCK_CURL_LOG}" ;; esac
+done
 
 url=""
 out_file=""
