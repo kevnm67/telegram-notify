@@ -75,7 +75,8 @@ tn_truncate() {
 }
 
 tn_strip_ansi() {
-    sed -E $'s/\x1B\\[[0-9;?]*[ -\\/]*[@-~]//g'
+    # '#' delimiter: GNU sed rejects an unescaped '/' inside the bracket expression.
+    sed -E $'s#\x1B\\[[0-9;?]*[ -/]*[@-~]##g'
 }
 
 # Format milliseconds as "1h 02m", "2m 13s" or "850ms".
