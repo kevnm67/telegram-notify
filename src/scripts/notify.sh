@@ -75,8 +75,9 @@ tn_truncate() {
 }
 
 tn_strip_ansi() {
-    # '#' delimiter: GNU sed rejects an unescaped '/' inside the bracket expression.
-    sed -E $'s#\x1B\\[[0-9;?]*[ -/]*[@-~]##g'
+    # LC_ALL=C: in UTF-8 locales GNU sed treats the raw ESC byte and the
+    # bracket ranges as multibyte text and never matches.
+    LC_ALL=C sed -E $'s#\x1B\\[[0-9;?]*[ -/]*[@-~]##g'
 }
 
 # Format milliseconds as "1h 02m", "2m 13s" or "850ms".
