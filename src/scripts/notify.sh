@@ -517,13 +517,21 @@ ${clean_output}"
         "$(tn_json_escape "$model")" "$max_tokens" "$(tn_json_escape "$system")" "$(tn_json_escape "$user")" >"$body_file"
 
     local api="${TELEGRAM_NOTIFY_ANTHROPIC_API_BASE:-https://api.anthropic.com}"
+    tn_ai_post() { # $1: --data-binary argument
+        curl -sS --max-time "${TELEGRAM_NOTIFY_AI_TIMEOUT:-60}" -X POST "${api}/v1/messages" \
+            -H "Content-Type: application/json" -H "x-api-key: ${key}" -H "anthropic-version: 2023-06-01" \
+            --data-binary "$1"
+    }
     local response
-    if ! response=$(curl -sS --max-time "${TELEGRAM_NOTIFY_AI_TIMEOUT:-60}" -X POST "${api}/v1/messages" \
-        -H "Content-Type: application/json" -H "x-api-key: ${key}" -H "anthropic-version: 2023-06-01" \
-        --data-binary "@${body_file}"); then
+    if ! response=$(tn_ai_post "@${body_file}"); then
         rm -f "$body_file"
         tn_log "ai_summary: Anthropic API request failed; section skipped"
         return 0
+    fi
+    if [[ "$response" == *"not valid JSON"* ]]; then
+        # Some environments mangle file uploads; log a probe and retry with the body in argv.
+        tn_log "ai_summary: file upload rejected as invalid JSON ($(wc -c <"$body_file" | tr -d ' ') bytes on disk, upload=$(curl -sS -o /dev/null -w '%{size_upload}' --max-time 20 -X POST "${api}/v1/messages" -H "Content-Type: application/json" -H "x-api-key: ${key}" -H "anthropic-version: 2023-06-01" --data-binary "@${body_file}" 2>/dev/null || echo '?')); retrying with an inline body"
+        response=$(tn_ai_post "$(cat "$body_file")")
     fi
     local text
     if tn_has jq; then

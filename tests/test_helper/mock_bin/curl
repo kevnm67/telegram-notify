@@ -51,7 +51,13 @@ case "$url" in
     reply "$MOCK_TELEGRAM_DOC_BODY" "${MOCK_DOC_HTTP_CODE:-200}"
     ;;
 */v1/messages)
-    reply "$MOCK_ANTHROPIC_BODY" "${MOCK_ANTHROPIC_HTTP_CODE:-200}"
+    # MOCK_ANTHROPIC_FIRST_BODY: answer the first call with it, later calls with MOCK_ANTHROPIC_BODY.
+    if [[ -n "${MOCK_ANTHROPIC_FIRST_BODY:-}" && ! -f "${MOCK_CURL_LOG}.ai-called" ]]; then
+        touch "${MOCK_CURL_LOG}.ai-called"
+        reply "$MOCK_ANTHROPIC_FIRST_BODY" "${MOCK_ANTHROPIC_HTTP_CODE:-200}"
+    else
+        reply "$MOCK_ANTHROPIC_BODY" "${MOCK_ANTHROPIC_HTTP_CODE:-200}"
+    fi
     ;;
 */api/v2/*/tests)
     printf '%s' "$MOCK_TESTS_JSON"
