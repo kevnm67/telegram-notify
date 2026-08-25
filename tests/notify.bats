@@ -648,3 +648,113 @@ setup() {
     [ "$status" -eq 0 ]
     [ ! -s "$MOCK_CURL_LOG" ]
 }
+
+# --- fallback paths (python3 present, jq absent) ---------------------------
+
+no_jq() { tn_has() { [[ "$1" == "jq" ]] && return 1; command -v "$1" >/dev/null 2>&1; }; }
+
+@test "test_summary renders via the python3 fallback when jq is absent" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    no_jq
+    export CIRCLE_TOKEN=abc
+    export MOCK_TESTS_JSON='{"items":[{"classname":"a","name":"ok","result":"success","run_time":1},{"classname":"b","name":"bad","result":"error","run_time":2,"message":"boom\nmore"}]}'
+    TELEGRAM_NOTIFY_TEMPLATE=test_summary
+    msg="$(tn_build_message failure "")"
+    [[ "$msg" == *"1 passed · 1 failed · 0 skipped · 2 total · ⏱ 3.0s"* ]]
+    [[ "$msg" == *"<code>b › bad</code> — boom"* ]]
+}
+
+@test "ai_summary parses the response via the python3 fallback when jq is absent" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    no_jq
+    export ANTHROPIC_API_KEY=sk-test
+    section="$(tn_section_ai_summary "boom" 2>/dev/null)"
+    [[ "$section" == *"mock summary"* ]]
+    [[ "$section" == *"<pre>mock prompt</pre>"* ]]
+}
+
+@test "ai_summary skips without error output, without JSON tools, and on transport errors" {
+    export ANTHROPIC_API_KEY=sk-test
+    run tn_section_ai_summary ""
+    [[ "$output" == *"no error output"* ]]
+    tn_has() { [[ "$1" == "jq" || "$1" == "python3" ]] && return 1; command -v "$1" >/dev/null 2>&1; }
+    run tn_section_ai_summary "boom"
+    [[ "$output" == *"needs jq or python3"* ]]
+    unset -f tn_has
+    tn_has() { command -v "$1" >/dev/null 2>&1; }
+    require_json_tool # transport-error path needs a parser present to get past the guard
+    export MOCK_CURL_EXIT=28
+    run tn_section_ai_summary "boom"
+    [[ "$output" == *"request failed"* ]]
+}
+
+@test "insights tolerates partial metrics and a missing flaky count" {
+    export CIRCLE_TOKEN=abc
+    export MOCK_INSIGHTS_JSON='{"metrics":{"total_runs":4,"failed_runs":0,"duration_metrics":{}}}'
+    export MOCK_FLAKY_JSON='{}'
+    TELEGRAM_NOTIFY_TEMPLATE=insights
+    msg="$(tn_build_message success "")"
+    [[ "$msg" == *"📈 <b>Insights</b>"* ]]
+    [[ "$msg" != *"Success rate"* ]]
+    [[ "$msg" != *"Flaky tests"* ]]
+    [[ "$msg" != *"MTTR"* ]]
+}
+
+@test "deploy template without a tag or environment still renders a card" {
+    TELEGRAM_NOTIFY_TEMPLATE=deploy
+    msg="$(tn_build_message success "")"
+    [[ "$msg" == *"🚀 <b>Deployed</b>"* ]]
+    TELEGRAM_NOTIFY_DEPLOY_VERSION=1.2.3
+    unset CIRCLE_BRANCH
+    msg="$(tn_build_message success "")"
+    [[ "$msg" == *"🚀 <b>Deployed</b> 1.2.3"* ]]
+}
+
+@test "tn_send_log_document reports upload failures and honours dry_run" {
+    TN_RAW_LOG_FILE="${TMPDIR}/telegram_notify_failed_step.log"
+    printf 'log\n' >"$TN_RAW_LOG_FILE"
+    export MOCK_DOC_HTTP_CODE=413
+    export MOCK_TELEGRAM_DOC_BODY='{"ok":false,"description":"Request Entity Too Large"}'
+    run tn_send_log_document
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"sendDocument failed"* ]]
+    TELEGRAM_NOTIFY_DRY_RUN=true
+    : >"$MOCK_CURL_LOG"
+    run tn_send_log_document
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"would attach"* ]]
+    [ ! -s "$MOCK_CURL_LOG" ]
+}
+
+@test "tn_links_line adds the pull request link and respects missing build url" {
+    export CIRCLE_PULL_REQUEST="https://github.com/kevnm67/telegram-notify/pull/3"
+    [[ "$(tn_links_line)" == *'<a href="https://github.com/kevnm67/telegram-notify/pull/3">Pull Request</a>'* ]]
+    unset CIRCLE_BUILD_URL
+    [ -z "$(tn_links_line)" ]
+}
+
+@test "tn_fetch_error_output logs when the build has no failed action" {
+    export CIRCLE_TOKEN=abc
+    export MOCK_CIRCLE_BUILD_JSON='{"steps":[{"actions":[{"failed":false,"output_url":"https://x/step-output/ok"}]}]}'
+    run tn_fetch_error_output
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"No failed step output found in build 42"* ]]
+}
+
+@test "main skips duration lookup when include_duration is false" {
+    export CIRCLE_TOKEN=abc
+    export TELEGRAM_NOTIFY_INCLUDE_DURATION=false
+    export TELEGRAM_NOTIFY_EVENT=success
+    run_script
+    [ "$status" -eq 0 ]
+    ! grep -q '/job/42' "$MOCK_CURL_LOG"
+    [[ "$(last_sent_text)" != *"Duration"* ]]
+}
+
+@test "ai_summary strips control bytes from the log before building the request" {
+    require_json_tool
+    export ANTHROPIC_API_KEY=sk-test
+    tn_section_ai_summary $'bad \x01byte\x7f here\ttab' >/dev/null 2>&1
+    grep -q 'bad byte here\\ttab' "$MOCK_CURL_LOG"
+    ! grep -q $'\x01' "$MOCK_CURL_LOG"
+}

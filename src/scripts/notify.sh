@@ -504,19 +504,24 @@ tn_section_ai_summary() {
 SUMMARY: two sentences max on what failed and the most likely root cause.
 FIX: one to three short lines describing the most likely fix.
 PROMPT: a single self-contained instruction (3-5 lines) a developer can paste into an AI coding assistant to fix this, quoting the key error text. Do not use markdown."
+    # Drop C0 control bytes (except \t \n \r) that would make the JSON invalid.
+    local clean_output
+    clean_output=$(printf '%s' "$error_output" | LC_ALL=C tr -d '\000-\010\013\014\016-\037\177')
     local user="${context}
 
 Failed step output (last lines):
-${error_output}"
-    local body
-    body=$(printf '{"model":"%s","max_tokens":%s,"system":"%s","messages":[{"role":"user","content":"%s"}]}' \
-        "$(tn_json_escape "$model")" "$max_tokens" "$(tn_json_escape "$system")" "$(tn_json_escape "$user")")
+${clean_output}"
+    local body_file
+    body_file=$(mktemp)
+    printf '{"model":"%s","max_tokens":%s,"system":"%s","messages":[{"role":"user","content":"%s"}]}' \
+        "$(tn_json_escape "$model")" "$max_tokens" "$(tn_json_escape "$system")" "$(tn_json_escape "$user")" >"$body_file"
 
     local api="${TELEGRAM_NOTIFY_ANTHROPIC_API_BASE:-https://api.anthropic.com}"
     local response
     if ! response=$(curl -sS --max-time "${TELEGRAM_NOTIFY_AI_TIMEOUT:-60}" -X POST "${api}/v1/messages" \
         -H "Content-Type: application/json" -H "x-api-key: ${key}" -H "anthropic-version: 2023-06-01" \
-        --data-binary "$body"); then
+        --data-binary "@${body_file}"); then
+        rm -f "$body_file"
         tn_log "ai_summary: Anthropic API request failed; section skipped"
         return 0
     fi
@@ -528,8 +533,11 @@ ${error_output}"
     fi
     if [[ -z "$text" ]]; then
         tn_log "ai_summary: empty or error response: $(tn_truncate "$response" 200)"
+        tn_log "ai_summary: request body started with: $(head -c 60 "$body_file" | LC_ALL=C od -c | head -n 2 | tr -s ' ')"
+        rm -f "$body_file"
         return 0
     fi
+    rm -f "$body_file"
 
     local summary fix prompt
     summary=$(printf '%s\n' "$text" | awk '/^SUMMARY:/{f=1; sub(/^SUMMARY:[ ]*/, ""); } /^FIX:/{f=0} f' | sed '/^$/d')

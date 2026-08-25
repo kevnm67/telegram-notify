@@ -60,6 +60,8 @@ All notable changes to this orb are documented here. The format follows
 
 ### Fixed
 
+- `ai_summary` sends the request body from a file and strips C0 control
+  bytes from the log so unusual step output cannot produce invalid JSON.
 - The bats helper now restores `errexit` after sourcing `notify.sh` — previously
   every bare `[[ ]]` assertion in the suite was silently vacuous.
 - `tn_extract_messages` no longer inserts blank lines between step messages.
