@@ -682,6 +682,7 @@ no_jq() { tn_has() { [[ "$1" == "jq" ]] && return 1; command -v "$1" >/dev/null 
     [[ "$output" == *"needs jq or python3"* ]]
     unset -f tn_has
     tn_has() { command -v "$1" >/dev/null 2>&1; }
+    require_json_tool # transport-error path needs a parser present to get past the guard
     export MOCK_CURL_EXIT=28
     run tn_section_ai_summary "boom"
     [[ "$output" == *"request failed"* ]]
