@@ -56,7 +56,7 @@ jobs:
     # macOS executors ship bash 3.2; this Alpine image also lacks jq and python3,
     # so it exercises every grep/sed/awk fallback path.
     docker:
-      - image: bash:3.2
+      - image: bash:5.3
     resource_class: small
     steps:
       - checkout
