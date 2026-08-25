@@ -6,32 +6,58 @@
     "helpers:pinGitHubActionDigests",
     "schedule:weekly"
   ],
-  "labels": ["dependencies"],
+  "labels": [
+    "dependencies"
+  ],
   "prConcurrentLimit": 5,
   "prHourlyLimit": 5,
-  "pre-commit": { "enabled": true },
+  "pre-commit": {
+    "enabled": true
+  },
   "packageRules": [
     {
       "description": "Bundle CircleCI orb bumps into one PR",
-      "matchManagers": ["circleci"],
-      "matchDepTypes": ["orb"],
+      "matchManagers": [
+        "circleci"
+      ],
+      "matchDepTypes": [
+        "orb"
+      ],
       "groupName": "circleci orbs"
     },
     {
       "description": "Bundle CircleCI executor image bumps into one PR",
-      "matchManagers": ["circleci"],
-      "matchDepTypes": ["docker"],
+      "matchManagers": [
+        "circleci"
+      ],
+      "matchDepTypes": [
+        "docker"
+      ],
       "groupName": "circleci images"
     },
     {
       "description": "Bundle GitHub Actions bumps into one PR",
-      "matchManagers": ["github-actions"],
+      "matchManagers": [
+        "github-actions"
+      ],
       "groupName": "github actions"
     },
     {
       "description": "Bundle pre-commit hook bumps into one PR",
-      "matchManagers": ["pre-commit"],
+      "matchManagers": [
+        "pre-commit"
+      ],
       "groupName": "pre-commit hooks"
+    },
+    {
+      "description": "bash:3.2 is intentional (macOS-executor compatibility job) \u2014 never bump the major",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "bash"
+      ],
+      "allowedVersions": "<4"
     }
   ]
 }
