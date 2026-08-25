@@ -758,3 +758,14 @@ no_jq() { tn_has() { [[ "$1" == "jq" ]] && return 1; command -v "$1" >/dev/null 
     grep -q 'bad byte here\\ttab' "$MOCK_CURL_LOG"
     ! grep -q $'\x01' "$MOCK_CURL_LOG"
 }
+
+@test "ai_summary retries with an inline body when the file upload is rejected as invalid JSON" {
+    require_json_tool
+    export ANTHROPIC_API_KEY=sk-test
+    export MOCK_ANTHROPIC_FIRST_BODY='{"type":"error","error":{"type":"invalid_request_error","message":"The request body is not valid JSON: unexpected character: line 1 column 1 (char 0)"}}'
+    run tn_section_ai_summary "boom"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"retrying with an inline body"* ]]
+    [[ "$output" == *"mock summary"* ]]
+    [ "$(grep -c 'v1/messages' "$MOCK_CURL_LOG")" -ge 3 ] # first try + probe + retry
+}

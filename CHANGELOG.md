@@ -60,6 +60,8 @@ All notable changes to this orb are documented here. The format follows
 
 ### Fixed
 
+- `ai_summary` retries with an inline request body (and logs an upload-size
+  probe) when the file upload is rejected as invalid JSON by the API.
 - `ai_summary` sends the request body from a file and strips C0 control
   bytes from the log so unusual step output cannot produce invalid JSON.
 - The bats helper now restores `errexit` after sourcing `notify.sh` — previously
