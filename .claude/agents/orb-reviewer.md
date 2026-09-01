@@ -33,4 +33,25 @@ Checklist (each item: state PASS or the finding):
 7. **CI YAML** — no inline multi-line shell; new jobs appear in required-check lists.
 8. **Secrets** — nothing in the diff prints tokens; `tn_log` never receives a token.
 
-Run `make lint test` and include the result. Keep the report under 400 words.
+Run the deterministic gates and include their real output — never assert a result
+you did not observe:
+
+```bash
+make lint test verify-diagrams
+```
+
+## Report format
+
+```markdown
+VERDICT: PASS | CHANGES REQUESTED — <one clause>
+
+| # | Check | Result |
+| --- | --- | --- |
+| 1 | Failure safety | PASS |
+| 2 | Escaping | src/scripts/notify.sh:412 — `$job` reaches the message unescaped |
+
+Gates: make lint ✅ · make test ✅ (74 passed) · make verify-diagrams ✅
+```
+
+Keep it under 400 words. Report only findings you can cite with `file:line`;
+if a check has nothing to say, write PASS rather than inventing a nit.

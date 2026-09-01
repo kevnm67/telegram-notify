@@ -21,7 +21,7 @@ failure analysis and releases.
 
 ```yaml
 orbs:
-  telegram-notify: kevnm67/telegram-notify@1.0.0
+  telegram-notify: kevnm67/telegram-notify@0.0.1
 
 steps:
   - telegram-notify/notify_failure:

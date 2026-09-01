@@ -19,7 +19,7 @@ if ! git clone --quiet "$WIKI_URL" "$WIKI_DIR"; then
     exit 0
 fi
 cp "${REPO_ROOT}"/wiki/*.md "$WIKI_DIR/"
-cp "${REPO_ROOT}"/docs/architecture/*.svg "${REPO_ROOT}"/docs/architecture/*.png "$WIKI_DIR/" 2>/dev/null || true
+cp "${REPO_ROOT}"/docs/architecture/*.svg "$WIKI_DIR/" 2>/dev/null || true
 
 cd "$WIKI_DIR"
 if [[ -z "$(git config user.email)" ]]; then

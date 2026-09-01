@@ -1,8 +1,8 @@
 # telegram-notify
 
 [![CircleCI](https://dl.circleci.com/status-badge/img/gh/kevnm67/telegram-notify/tree/main.svg?style=svg)](https://dl.circleci.com/status-badge/redirect/gh/kevnm67/telegram-notify/tree/main)
-[![Maintainability](https://qlty.sh/badges/QLTY_BADGE_ID/maintainability.svg)](https://qlty.sh/gh/kevnm67/projects/telegram-notify)
-[![Code Coverage](https://qlty.sh/badges/QLTY_BADGE_ID/coverage.svg)](https://qlty.sh/gh/kevnm67/projects/telegram-notify)
+[![Maintainability](https://qlty.sh/gh/kevnm67/projects/telegram-notify/maintainability.svg)](https://qlty.sh/gh/kevnm67/projects/telegram-notify)
+[![Code Coverage](https://qlty.sh/gh/kevnm67/projects/telegram-notify/coverage.svg)](https://qlty.sh/gh/kevnm67/projects/telegram-notify)
 [![CircleCI Orb](https://badges.circleci.com/orbs/kevnm67/telegram-notify.svg)](https://circleci.com/developer/orbs/orb/kevnm67/telegram-notify)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -70,7 +70,7 @@ Create a context (e.g. `telegram`) with:
 version: 2.1
 
 orbs:
-  telegram-notify: kevnm67/telegram-notify@1.0.0
+  telegram-notify: kevnm67/telegram-notify@0.0.1
 
 jobs:
   build:
@@ -305,7 +305,25 @@ differently named token variable with `bot_token: MY_BOT_TOKEN`.
 
 ## Architecture
 
-![Notification flow](docs/architecture/notification_flow.svg)
+<a href="docs/architecture/notification_flow-dark.svg" target="_blank">
+  <img src="docs/architecture/notification_flow-dark.svg"
+       alt="A CircleCI job invokes the orb command; notify.sh filters on branch or tag,
+            resolves job status, reads failed-step output, tests and insights from the
+            CircleCI API plus an optional Anthropic summary, then posts an HTML message
+            with inline buttons to the Telegram Bot API"
+       width="100%">
+</a>
+
+*Click the diagram to open it full size. It is vector, so it stays sharp at any zoom.*
+
+Source is [`docs/architecture/notification_flow.d2`](docs/architecture/notification_flow.d2) —
+regenerate with `make diagrams`:
+
+```bash
+d2 validate docs/architecture/notification_flow.d2
+d2 --bundle --theme 200 --layout elk --pad 60 \
+   docs/architecture/notification_flow.d2 docs/architecture/notification_flow-dark.svg
+```
 
 ```text
 src/

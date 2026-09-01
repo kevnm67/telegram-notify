@@ -5,10 +5,10 @@ SHELL := /usr/bin/env bash
 ORB_NAME ?= kevnm67/telegram-notify
 PACKED   ?= orb.yml
 DOCKER_IMAGE ?= cimg/base:current-22.04
-D2_FLAGS := --theme 0 --scale 2 --pad 60
+# Dark-only SVG, icons bundled (an <img>-loaded SVG cannot fetch remote icons).
+D2_FLAGS := --bundle --theme 200 --layout elk --pad 60
 DIAGRAM_SRCS := $(wildcard docs/architecture/*.d2)
-DIAGRAM_SVGS := $(DIAGRAM_SRCS:.d2=.svg)
-DIAGRAM_PNGS := $(DIAGRAM_SRCS:.d2=.png)
+DIAGRAM_SVGS := $(DIAGRAM_SRCS:.d2=-dark.svg)
 
 .PHONY: help setup lint test test-bash32 integration coverage build validate review pack publish-dev generate-commands diagrams verify-diagrams wiki-sync clean
 
@@ -64,12 +64,9 @@ review: pack ## Run orb-tools style review locally (requires circleci CLI >= 0.1
 publish-dev: validate ## Publish a dev version: make publish-dev TAG=alpha
 	circleci orb publish $(PACKED) $(ORB_NAME)@dev:$(or $(TAG),alpha)
 
-diagrams: $(DIAGRAM_SVGS) $(DIAGRAM_PNGS) ## Render docs/architecture/*.d2 to SVG + PNG
+diagrams: $(DIAGRAM_SVGS) ## Render docs/architecture/*.d2 to dark-mode SVG
 
-docs/architecture/%.svg: docs/architecture/%.d2
-	d2 $(D2_FLAGS) $< $@
-
-docs/architecture/%.png: docs/architecture/%.d2
+docs/architecture/%-dark.svg: docs/architecture/%.d2
 	d2 $(D2_FLAGS) $< $@
 
 verify-diagrams: ## Fail if rendered diagrams are stale or docs contain text diagrams

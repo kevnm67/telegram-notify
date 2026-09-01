@@ -27,6 +27,7 @@ make coverage        # kcov line coverage (Docker on macOS)
 make integration     # mock Telegram + stubbed CircleCI/Anthropic APIs, all templates
 make validate        # circleci orb pack + validate
 make generate-commands
+make diagrams        # d2 -> docs/architecture/*-dark.svg (dark only, never PNG)
 make publish-dev TAG=alpha
 ```
 
@@ -42,4 +43,6 @@ make publish-dev TAG=alpha
 
 ## Release
 
-`main` → `@dev:alpha` automatically. Production: update `CHANGELOG.md`, tag `vX.Y.Z` (see `/orb-release`).
+`main` → `@dev:alpha` automatically. Production: update `CHANGELOG.md`, run
+`scripts/dev/release-preflight.sh X.Y.Z`, then tag `vX.Y.Z` (see `/orb-release`).
+Orb versions are immutable — fix forward with a patch, never republish.

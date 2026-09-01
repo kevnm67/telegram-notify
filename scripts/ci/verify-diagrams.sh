@@ -1,30 +1,28 @@
 #!/usr/bin/env bash
 # Lint gate for architecture diagrams:
-#   1. every docs/architecture/*.d2 has a committed SVG + PNG (> 1 KiB)
+#   1. every docs/architecture/*.d2 has a committed dark SVG (> 1 KiB)
 #   2. re-rendering with the same D2_FLAGS produces an identical SVG
 #   3. no Mermaid / ASCII-art diagrams in committed markdown
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-D2_FLAGS="${D2_FLAGS:---theme 0 --scale 2 --pad 60}"
+D2_FLAGS="${D2_FLAGS:---bundle --theme 200 --layout elk --pad 60}"
 cd "$REPO_ROOT"
 
 shopt -s nullglob
 status=0
 for src in docs/architecture/*.d2; do
-    base="${src%.d2}"
-    for ext in svg png; do
-        if [[ ! -s "${base}.${ext}" ]] || [[ $(wc -c <"${base}.${ext}") -lt 1024 ]]; then
-            echo "FAIL: ${base}.${ext} missing or smaller than 1 KiB (run 'make diagrams')" >&2
-            status=1
-        fi
-    done
+    dark="${src%.d2}-dark.svg"
+    if [[ ! -s "$dark" ]] || [[ $(wc -c <"$dark") -lt 1024 ]]; then
+        echo "FAIL: $dark missing or smaller than 1 KiB (run 'make diagrams')" >&2
+        status=1
+    fi
     if command -v d2 >/dev/null; then
         tmp="$(mktemp -t diagram.XXXXXX.svg)"
         # shellcheck disable=SC2086
         d2 $D2_FLAGS "$src" "$tmp" >/dev/null 2>&1
-        if ! cmp -s "$tmp" "${base}.svg"; then
-            echo "FAIL: ${base}.svg is stale — run 'make diagrams' and commit" >&2
+        if ! cmp -s "$tmp" "$dark"; then
+            echo "FAIL: $dark is stale — run 'make diagrams' and commit" >&2
             status=1
         fi
         rm -f "$tmp"

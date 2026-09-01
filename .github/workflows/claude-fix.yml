@@ -91,6 +91,11 @@ jobs:
 
                No actionable fixes found in review feedback. All clear.
 
+          # Pin the model: the action's default resolved to `claude-opus-5[1m]`, a
+          # Claude Code CLI alias the Messages API rejects — every run since
+          # 2026-08-25 died in ~340ms with is_error and $0 cost. Sonnet is also the
+          # right tier for an automated reviewer that runs on every push.
           claude_args: >-
+            --model claude-sonnet-5
             --allowedTools
             "Edit,Write,Read,Glob,Grep,Bash(git:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(gh api:*)"

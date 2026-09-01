@@ -11,7 +11,24 @@
 
 ## Flow
 
-![Notification flow](notification_flow.svg)
+<a href="notification_flow-dark.svg" target="_blank">
+  <img src="notification_flow-dark.svg"
+       alt="A CircleCI job invokes the orb command; notify.sh filters on branch or tag,
+            resolves job status, reads failed-step output, tests and insights from the
+            CircleCI API plus an optional Anthropic summary, then posts an HTML message
+            with inline buttons to the Telegram Bot API"
+       width="100%">
+</a>
+
+*Click the diagram to open it full size. It is vector, so it stays sharp at any zoom.*
+
+Source is `docs/architecture/notification_flow.d2` in the main repo — regenerate with
+`make diagrams`:
+
+```bash
+d2 --bundle --theme 200 --layout elk --pad 60 \
+   docs/architecture/notification_flow.d2 docs/architecture/notification_flow-dark.svg
+```
 
 ## Components
 
