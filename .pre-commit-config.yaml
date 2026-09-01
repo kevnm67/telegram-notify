@@ -26,10 +26,16 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: mixed-line-ending
+      - id: detect-private-key
       - id: check-yaml
         exclude: ^\.circleci/test-deploy\.yml$ # contains the injected-orb placeholder
       - id: check-executables-have-shebangs
       - id: check-shebang-scripts-are-executable
+        # .bats files carry `#!/usr/bin/env bats` by convention but are run by
+        # the bats runner, never executed directly.
+        exclude: \.bats$
 
   - repo: local
     hooks:

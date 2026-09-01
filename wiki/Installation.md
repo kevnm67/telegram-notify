@@ -33,7 +33,7 @@ Attach the context to every job that uses the orb.
 ```yaml
 version: 2.1
 orbs:
-  telegram-notify: kevnm67/telegram-notify@1.0.0
+  telegram-notify: kevnm67/telegram-notify@0.0.1
 
 jobs:
   build:

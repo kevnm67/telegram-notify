@@ -20,13 +20,15 @@ success, or always. Bash + curl only.
 | `src/scripts/notify.sh` | All logic: filters → status → CircleCI/Anthropic fetches → template sections → render → send. `tn_*` functions; `main` guarded by `TELEGRAM_NOTIFY_NO_MAIN` |
 | `scripts/ci/stub-circleci-api.sh`, `mock-telegram-server.py` | API doubles for integration tests (:8090/:8091 and :8089) |
 | `.claude/` | Project guide, edit/commit hooks, `orb-reviewer` agent, `live-test` / `orb-release` / `add-parameter` skills |
+| `scripts/dev/live-test.sh` | Triggers + reports the `live_test` workflow (token never reaches argv) |
+| `scripts/dev/release-preflight.sh` | Deterministic gate run before tagging `vX.Y.Z` |
 | `src/scripts/record_failure.sh` | `on_fail` marker used by `event: always` |
 | `src/examples/*.yml` | Registry usage examples (`usage:` must be valid 2.1 config) |
 | `tests/notify.bats` | Unit suite; `tests/test_helper/mock_bin/curl` is the curl double |
 | `scripts/ci/*.sh` | Everything CI runs — no inline shell in YAML |
 | `.circleci/config.yml` | Setup workflow (lint/pack/review/shellcheck/unit_tests → continue) |
 | `.circleci/test-deploy.yml` | Integration jobs with the injected orb + publish |
-| `docs/architecture/*.d2` | Diagram source; render with `make diagrams` (never Mermaid/ASCII) |
+| `docs/architecture/*.d2` | Diagram source; `make diagrams` renders `*-dark.svg` (never PNG/Mermaid/ASCII) |
 | `wiki/` | Synced to the GitHub wiki by `wiki-sync.yml` |
 
 ## Rules
@@ -50,6 +52,7 @@ success, or always. Bash + curl only.
 make lint          # shellcheck + yamllint + markdownlint + orb validate
 make test          # bats
 make coverage      # kcov (Docker on macOS)
+make diagrams      # d2 --bundle --theme 200 --layout elk -> docs/architecture/*-dark.svg
 make test-bash32   # bash 3.2, no jq/python3 (Docker)
 make integration   # all templates vs mock/stub APIs
 make validate      # circleci orb pack + validate

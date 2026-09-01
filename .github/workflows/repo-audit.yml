@@ -20,7 +20,7 @@ jobs:
       pull-requests: write
     steps:
     - name: Mark stale issues and PRs
-      uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93
+      uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93 # v11.0.0
       with:
         stale-issue-message: 'This issue has been automatically marked as stale because it has not had
           recent activity. It will be closed in 7 days if no further activity occurs.
@@ -50,7 +50,7 @@ jobs:
       contents: read
     steps:
     - name: Checkout repository
-      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         fetch-depth: 0
         persist-credentials: false
@@ -80,7 +80,7 @@ jobs:
       contents: read
     steps:
     - name: Checkout repository
-      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         persist-credentials: false
     - name: Find orphaned TODOs
@@ -106,11 +106,11 @@ jobs:
       contents: read
     steps:
     - name: Checkout repository
-      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         fetch-depth: 0
         persist-credentials: false
     - name: Run trufflehog secret scan
-      uses: trufflesecurity/trufflehog@bcfcf73aaf4759d4dadc2783177c245a02792318
+      uses: trufflesecurity/trufflehog@20652fbbdefffcdaa493a5bf57ab2ac6b1db715b # v3.97.1
       with:
         extra_args: --only-verified

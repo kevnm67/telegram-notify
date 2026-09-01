@@ -11,8 +11,11 @@ or mitigation plan within 14 days for confirmed issues.
 
 | Version | Supported |
 | --- | --- |
-| 1.x | ✅ |
-| 0.x | ❌ (pre-release, upgrade to 1.x) |
+| 0.0.x | ✅ (current release line) |
+| `dev:alpha` | ❌ (unstable pre-release of `main`; never pin it in production) |
+
+Orb versions are immutable: a fix ships as a new patch release, never as a
+republish of an existing version.
 
 ## Security considerations for this orb
 

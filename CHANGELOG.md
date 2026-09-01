@@ -6,6 +6,8 @@ All notable changes to this orb are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.0.1] - 2026-09-01
+
 ### Added
 
 - Templates: `test_summary` (pass/fail/skip counts, runtime, failed test names
@@ -76,3 +78,6 @@ All notable changes to this orb are documented here. The format follows
 
 - Initial `notify-failure` command sending Telegram messages with error
   output from the CircleCI v1.1 API.
+
+[Unreleased]: https://github.com/kevnm67/telegram-notify/compare/v0.0.1...HEAD
+[0.0.1]: https://github.com/kevnm67/telegram-notify/releases/tag/v0.0.1

@@ -1,82 +1,80 @@
-# telegram-notify orb — notification flow. Render: make diagrams
+# telegram-notify orb — notification flow.
+#
+# Theme-safe on purpose: no style.fill / style.stroke hex values anywhere, so the one
+# source renders correctly under any d2 theme. Emphasis comes from shape, stroke-dash,
+# stroke-width and bold instead.
+#
+# Regenerate (see `make diagrams`):
+#   d2 validate docs/architecture/notification_flow.d2
+#   d2 --bundle --theme 200 --layout elk docs/architecture/notification_flow.d2 \
+#      docs/architecture/notification_flow-dark.svg
+
 direction: right
 
+title: {
+  label: telegram-notify — notification flow
+  near: top-center
+  shape: text
+  style.font-size: 36
+  style.underline: true
+}
+
 classes: {
-  node: {
-    style.font-size: 24
-    style.border-radius: 8
+  vcs: {
+    icon: https://icons.terrastruct.com/dev/github.svg
+    shape: image
   }
-  edge: {
+  step: {
+    shape: rectangle
+    style.border-radius: 8
+    style.font-size: 22
+  }
+  # Anything the orb only reads from — dashed, never coloured.
+  external: {
+    shape: rectangle
+    style.stroke-dash: 5
+    style.font-size: 22
+  }
+  data: {
+    shape: cylinder
     style.font-size: 22
   }
 }
 
-developer: Developer / Renovate {
-  class: node
-  icon: https://icons.terrastruct.com/dev%2Fgithub.svg
-  shape: image
+source: GitHub / Renovate {
+  class: vcs
+  label: ""
 }
 
 circleci: CircleCI job {
-  class: node
-  icon: https://icons.terrastruct.com/aws%2FManagement%20%26%20Governance%2FAWS-Management-Console_light-bg.svg
-  shape: image
+  class: step
+  style.bold: true
 }
 
 orb: telegram-notify orb {
-  class: node
-  style.fill: "#EAF2FB"
+  style.font-size: 26
 
-  cmd: "notify / notify_failure / notify_success\n(event + template + filters)" {
-    class: node
-    shape: rectangle
+  cmd: "notify · notify_failure\nnotify_success" {class: step}
+  script: "notify.sh\nfilter → status → fetch\n→ render → send" {
+    class: step
+    style.bold: true
   }
-  script: "notify.sh\nbranch/tag filter → status → fetch → render → send" {
-    class: node
-    shape: rectangle
-  }
-  templates: "templates\nbasic · test_summary · insights\nai_summary · deploy · custom" {
-    class: node
-    shape: rectangle
-    style.stroke-dash: 3
-  }
-  marker: "record_failure.sh\n(marker for event: always)" {
-    class: node
-    shape: rectangle
-    style.stroke-dash: 3
-  }
-  cmd -> script: "TELEGRAM_NOTIFY_* env" {class: edge}
-  marker -> script: "job failed?" {class: edge}
-  templates -> script: "sections" {class: edge}
+  marker: "record_failure.sh\nmarker for event: always" {class: external}
+  templates: "templates\nbasic · test_summary · insights\nai_summary · deploy · custom" {class: data}
+
+  cmd -> script: TELEGRAM_NOTIFY_* env {style.animated: true}
+  marker -> script: job failed? {style.stroke-dash: 5}
+  templates -> script: sections {style.stroke-dash: 5}
 }
 
-cci_api: "CircleCI API\nv1.1 step output · v2 job / tests · Insights" {
-  class: node
-  icon: https://icons.terrastruct.com/aws%2F_General%2FTraditional-server_light-bg.svg
-  shape: image
-}
+cci_api: "CircleCI API\nv1.1 step output · v2 job\nv2 tests · Insights" {class: external}
+anthropic: "Anthropic Messages API\ntemplate: ai_summary" {class: external}
+telegram: Telegram Bot API {class: step}
+chat: "Telegram chat / topic" {class: step}
 
-anthropic: "Anthropic Messages API\n(template: ai_summary)" {
-  class: node
-  icon: https://icons.terrastruct.com/aws%2FApplication%20Integration%2FAmazon-Simple-Notification-Service-SNS_Topic_light-bg.svg
-  shape: image
-}
-
-telegram: Telegram Bot API {
-  class: node
-  icon: https://icons.terrastruct.com/aws%2FApplication%20Integration%2FAmazon-Simple-Notification-Service-SNS_HTTP-Notification_light-bg.svg
-  shape: image
-}
-
-chat: Telegram chat / topic {
-  class: node
-  icon: https://icons.terrastruct.com/aws%2FApplication%20Integration%2FAmazon-Simple-Notification-Service-SNS_light-bg.svg
-  shape: image
-}
-
-developer -> circleci: "push / PR / tag" {class: edge}
-circleci -> orb.cmd: "step or post-step" {class: edge}
-orb.script -> cci_api: "GET failed output, duration,\ntest results, insights (CIRCLE_TOKEN)" {class: edge}
-orb.script -> anthropic: "POST summary + fix + prompt\n(ANTHROPIC_API_KEY, opt-in)" {class: edge}
-orb.script -> telegram: "sendMessage (HTML, inline buttons)\nsendDocument (attach_log)" {class: edge}
-telegram -> chat: "🔴 failure / ✅ success / 🚀 release" {class: edge}
+source -> circleci: push · PR · tag {style.animated: true}
+circleci -> orb.cmd: step or post-step {style.animated: true}
+orb.script -> cci_api: "GET failed output, duration,\ntests, insights (CIRCLE_TOKEN)" {style.stroke-dash: 5}
+orb.script -> anthropic: "POST error tail (opt-in)" {style.stroke-dash: 5}
+orb.script -> telegram: "sendMessage (HTML + buttons)\nsendDocument (attach_log)" {style.animated: true}
+telegram -> chat: "🔴 failure · ✅ success · 🚀 release" {style.animated: true}
