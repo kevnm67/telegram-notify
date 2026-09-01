@@ -24,7 +24,9 @@ ok() { echo "ok:   $*"; }
 [[ -z "$(git status --porcelain)" ]] || fail "working tree is dirty"
 git fetch --quiet origin main
 [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] || fail "main is not in sync with origin/main"
-[[ $status -eq 0 ]] && ok "on a clean main, in sync with origin" || true
+if [[ $status -eq 0 ]]; then
+    ok "on a clean main, in sync with origin"
+fi
 
 if git rev-parse --verify --quiet "refs/tags/v${VERSION}" >/dev/null ||
     git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" >/dev/null 2>&1; then
@@ -60,7 +62,9 @@ if command -v gh >/dev/null; then
 fi
 
 make lint test validate verify-diagrams >/dev/null || fail "make lint test validate verify-diagrams failed — rerun it directly"
-[[ $status -eq 0 ]] && ok "local gates pass" || true
+if [[ $status -eq 0 ]]; then
+    ok "local gates pass"
+fi
 
 if [[ $status -eq 0 ]]; then
     echo
