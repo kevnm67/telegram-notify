@@ -21,6 +21,17 @@ fi
 cp "${REPO_ROOT}"/wiki/*.md "$WIKI_DIR/"
 cp "${REPO_ROOT}"/docs/architecture/*.svg "$WIKI_DIR/" 2>/dev/null || true
 
+# Copying alone never removes anything, so a renamed or dropped render used to
+# linger in the wiki forever (a stale notification_flow.png survived the switch
+# to notification_flow-dark.svg). Delete wiki images the repo no longer ships.
+for img in "$WIKI_DIR"/*.svg "$WIKI_DIR"/*.png; do
+    [[ -e "$img" ]] || continue
+    if [[ ! -e "${REPO_ROOT}/docs/architecture/$(basename "$img")" ]]; then
+        echo "pruning orphaned wiki image: $(basename "$img")"
+        rm -f "$img"
+    fi
+done
+
 cd "$WIKI_DIR"
 if [[ -z "$(git config user.email)" ]]; then
     git config user.email "ci@github.com"
