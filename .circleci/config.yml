@@ -36,6 +36,9 @@ jobs:
     steps:
       - checkout
       - run:
+          name: No ASCII diagrams
+          command: python3 -I scripts/ci/check-no-ascii-diagrams.py
+      - run:
           name: Install bats + kcov
           command: ./scripts/ci/install-test-tools.sh
       - run:

@@ -39,6 +39,11 @@ repos:
 
   - repo: local
     hooks:
+      - id: check-no-ascii-diagrams
+        name: no ASCII diagrams (use D2)
+        entry: scripts/ci/check-no-ascii-diagrams.py
+        language: script
+        types: [markdown]
       - id: orb-validate
         name: circleci orb pack + validate
         entry: make validate

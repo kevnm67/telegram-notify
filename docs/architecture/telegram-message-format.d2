@@ -1,0 +1,13 @@
+(** -> **)[*].style.font-size: 14
+direction: down
+title: {label: "Telegram message format"; near: top-center; shape: text; style.font-size: 28}
+msg: "Notification message" {
+  style.font-size: 18
+  grid-columns: 1
+  head: "Header: red circle + 'CI Failure'\nfollowed by the custom_message text"
+  meta: "Metadata block\nRepository (linked), Branch (linked; Tag on tag builds), Job (linked)\nCommit short SHA + PR number (PR linked), Triggered by, Duration"
+  tests: "Tests section (template-driven)\ncounts: passed, failed, skipped, total, time\nfirst failing test and its assertion message"
+  err: "Error output\nlast failing command output"
+  mentions: "Mentions\n@alice @bob"
+  btn: "Inline buttons\nView build | Workflow | Pull request"
+}
