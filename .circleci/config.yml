@@ -18,7 +18,7 @@ parameters:
 
 orbs:
   orb-tools: circleci/orb-tools@12.5.0
-  shellcheck: circleci/shellcheck@3.4.0
+  shellcheck: circleci/shellcheck@3.5.1
   qlty: qltysh/qlty-orb@0.1.2
   # Consumes the last dev publish of THIS orb (renovate: ignore — dev tag, not semver).
   telegram-notify: kevnm67/telegram-notify@dev:alpha
