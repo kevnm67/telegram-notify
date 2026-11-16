@@ -23,8 +23,11 @@ setup: ## Install local tooling (brew) and pre-commit hooks
 	command -v pre-commit >/dev/null || pip install pre-commit
 	pre-commit install
 
-gates: ## Local pre-push gate (lint + unit tests), run by gate-stamp
-	PYENV_VERSION=$${PYENV_VERSION:-3.14.0} $(MAKE) lint test
+gates: ## Local pre-push gate (shellcheck, yamllint, orb pack, bats; no API token)
+	shellcheck -x src/scripts/*.sh scripts/ci/*.sh tests/test_helper/mock_bin/curl
+	PYENV_VERSION=$${PYENV_VERSION:-3.14.0} yamllint --strict .
+	circleci orb pack src > $(PACKED)
+	$(MAKE) test
 
 lint: ## shellcheck + yamllint + markdownlint + orb validate
 	shellcheck -x src/scripts/*.sh scripts/ci/*.sh tests/test_helper/mock_bin/curl
