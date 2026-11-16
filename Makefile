@@ -10,7 +10,7 @@ D2_FLAGS := --bundle --theme 200 --layout elk --pad 60
 DIAGRAM_SRCS := $(wildcard docs/architecture/*.d2)
 DIAGRAM_SVGS := $(DIAGRAM_SRCS:.d2=-dark.svg)
 
-.PHONY: help setup lint test test-bash32 integration coverage build validate review pack publish-dev generate-commands diagrams verify-diagrams wiki-sync clean
+.PHONY: help gates setup lint test test-bash32 integration coverage build validate review pack publish-dev generate-commands diagrams verify-diagrams wiki-sync clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -22,6 +22,9 @@ setup: ## Install local tooling (brew) and pre-commit hooks
 	brew list d2 >/dev/null 2>&1 || brew install d2
 	command -v pre-commit >/dev/null || pip install pre-commit
 	pre-commit install
+
+gates: ## Local pre-push gate (lint + unit tests), run by gate-stamp
+	PYENV_VERSION=$${PYENV_VERSION:-3.14.0} $(MAKE) lint test
 
 lint: ## shellcheck + yamllint + markdownlint + orb validate
 	shellcheck -x src/scripts/*.sh scripts/ci/*.sh tests/test_helper/mock_bin/curl
